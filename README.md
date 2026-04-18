@@ -1,14 +1,12 @@
 # ContextForge
 
-A Claude Code skill that scaffolds a complete AI-assisted coding workflow in seconds.
+Scaffold a complete AI-assisted coding workflow in seconds — works with any AI (Claude, ChatGPT, Gemini, Copilot, Cursor, Windsurf, and more).
 
-Run `/setupcode` and get 17 template files — a structured `/doc` folder, prompts, changelogs, and progress tracking — ready to fill in for any project.
+Run the setup prompt and get 17 template files — a structured `/doc` folder, session prompts, changelogs, and progress tracking — ready to fill in for any project.
 
 ---
 
-## What it does
-
-When you run `/setupcode`, ContextForge creates:
+## What it creates
 
 ```
 your-project/
@@ -33,50 +31,49 @@ your-project/
         └── Progress-N.txt    ← Per-task detailed logs
 ```
 
-All files use `[FILL IN: ...]` placeholders — replace them with your project's details and you're ready to go.
+All files use `[FILL IN: ...]` placeholders — replace them with your project details and you're ready to code.
 
 ---
 
 ## Install
 
-### Option A – Project-level (recommended)
+### Option A — Paste into any AI chat (no setup required)
 
-Copy `.claude/commands/setupcode.md` into your project's `.claude/commands/` folder:
+Copy the raw content of [`setupcode.md`](https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/setupcode.md) and paste it into any AI chat (ChatGPT, Claude, Gemini, Copilot, etc.). The AI will create all 17 files in your project folder.
+
+### Option B — Claude Code slash command (project-level)
 
 ```bash
-mkdir -p .claude/commands
-curl -o .claude/commands/setupcode.md \
+mkdir -p .claude/commands && curl -o .claude/commands/setupcode.md \
   https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/setupcode.md
 ```
 
-### Option B – Global (available in all projects)
+Then type `/setupcode` inside Claude Code.
+
+### Option C — Claude Code slash command (global, all projects)
 
 ```bash
-mkdir -p ~/.claude/commands
-curl -o ~/.claude/commands/setupcode.md \
+mkdir -p ~/.claude/commands && curl -o ~/.claude/commands/setupcode.md \
   https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/setupcode.md
 ```
+
+Then type `/setupcode` in any project.
 
 ---
 
 ## Usage
 
-1. Open Claude Code in your project folder
-2. Type `/setupcode`
-3. Fill in all `[FILL IN: ...]` placeholders in the generated `/doc` files
-4. Paste `initialprompt.md` into your AI chat to start your first session
-5. Use `subsequentprompt.md` for every session after that
-
----
-
-## Workflow
+1. Run the setup (any option above) to generate the `/doc` folder and prompt files
+2. Fill in all `[FILL IN: ...]` placeholders across the `/doc` files
+3. Paste `initialprompt.md` into your AI chat to start your first session
+4. Use `subsequentprompt.md` for every session after that
 
 ```
-Session 1:  paste initialprompt.md  →  AI reads all /doc files, implements Task 1
-Session 2+: paste subsequentprompt.md  →  AI continues from progress.txt
+Session 1:  paste initialprompt.md   →  AI reads all /doc files, implements Task 1
+Session 2+: paste subsequentprompt.md →  AI continues from progress.txt
 ```
 
-**Token efficiency:** Full `/doc` context is loaded once. Only `progress.txt` is sent on every follow-up session — keeping token costs low.
+**Token efficiency:** Full `/doc` context is loaded once. Only `progress.txt` is sent on follow-up sessions — keeping token costs low.
 
 ---
 
@@ -90,11 +87,15 @@ Session 2+: paste subsequentprompt.md  →  AI continues from progress.txt
 
 ---
 
-## Compatible with
+## Compatible AI tools
 
-Any AI that supports custom slash commands or can be given a prompt file:
-- Claude Code (`/setupcode` slash command)
-- Any AI chat (paste the content of `initialprompt.md` / `subsequentprompt.md`)
+| Tool | How to use |
+|---|---|
+| **Claude Code** | Install via Option B or C above, then `/setupcode` |
+| **ChatGPT / Gemini** | Paste `setupcode.md` content into chat (Option A) |
+| **Cursor / Windsurf** | Paste `setupcode.md` into AI panel, or add `.cursorrules` pointing to `/doc` |
+| **GitHub Copilot** | Paste `setupcode.md` into Copilot Chat |
+| **Any other AI** | Paste `setupcode.md` content — it works in any chat |
 
 ---
 
