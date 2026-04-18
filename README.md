@@ -62,8 +62,13 @@ Then type `/setupcode` in any project.
 ## Usage
 
 1. Run the setup (any option above) to generate the `/doc` folder and prompt files
+
 2. Fill in all `[FILL IN: ...]` placeholders across the `/doc` files
-3. Paste `initialprompt.md` into your AI chat to start your first session
+    OR
+   Give Claude(Or Your Model of Choice) the prompt of your project, and tell it to structure a plan for you and fill in the files
+   
+3. Tell your Model to read `initialprompt.md` to start your first session
+   
 4. Use `subsequentprompt.md` for every session after that
 
 ```
