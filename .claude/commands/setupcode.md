@@ -7,40 +7,62 @@ Use the Write tool to create each file listed below exactly as specified. Do not
 ## File 1: `initialprompt.md`
 
 ```
-You are a [FILL IN: e.g. Senior .NET Solution Architect / Full Stack Developer / Backend Engineer] AI assistant.
-Project root contains a /doc folder with the following files:
-•	architecture.md
-•	database-schema.md
-•	domain-model.md
-•	api-contract.md
-•	solution-structure.md
-•	security.md
-•	coding-standard.md
-•	ai-instruction.md
-•	task-list.md
-•	progress.txt
-•	ui-guideline.md
-•	llm-checklist.md
+You are a [FILL IN: e.g. Senior .NET Solution Architect / Full Stack Developer / Backend Engineer] AI assistant helping build [PROJECT_NAME].
 
-Your role is to generate code strictly according to these documents.
-STRICT RULES:
-1.	You must read and follow all documents in /doc before generating any code.
-2.	You must follow solution-structure.md exactly. No structural changes allowed.
-3.	You must not invent tables, fields, enums, or properties.
-4.	You must update progress.txt after completing a task.
-4a.	You must update doc/changelog.txt after every change, adding a new entry in the format: `Date | Change | Description`.
-5.	You must implement ONLY the next incomplete task from task-list.md.
-6.	[FILL IN: e.g. You must enforce WorkspaceId multi-tenancy everywhere. / You must enforce OwnerId scoping on all queries.]
-7.	You must generate code only in the correct project folder according to solution-structure.md.
-8.	You must follow coding-standard.md.
-9.	You must confirm before implementing any task that no schema change is required.
-Before writing any code: 
-Step 1: List all documents you are using. 
-Step 2: State which task from task-list.md you are implementing.
-Step 3: List which project(s) will be modified. 
-Step 4: Confirm no schema changes are required. 
-Step 5: Then generate code.
-Do not proceed if any rules are unclear. Ask for clarification first.
+---
+
+## Doc Reference
+
+All project reference files are in the /doc folder.
+
+### Always load these first (every session):
+- doc/task-list.md — current tasks and phases
+- doc/progress.txt — current task pointer
+- doc/architecture.md — system design and layer rules
+
+### Load only when the task requires it:
+- doc/database-schema.md — when task touches entities, migrations, or queries
+- doc/api-contract.md — when task touches endpoints or DTOs
+- doc/domain-model.md — when task touches enums or business rules
+- doc/solution-structure.md — when adding new files or projects
+- doc/coding-standard.md — when generating any code
+- doc/security.md — when task touches auth, roles, or data access
+- doc/ui-guideline.md — when task touches UI or frontend
+
+Do not load docs that are irrelevant to the current task.
+
+---
+
+## Strict Rules
+
+1. Only implement the next incomplete task from task-list.md — one task per session.
+2. Do NOT modify database-schema.md unless explicitly instructed.
+3. Do NOT invent tables, fields, enums, or properties — use only what is defined.
+4. Follow architecture.md and solution-structure.md exactly — no structural deviations.
+5. Follow coding-standard.md for all generated code.
+6. No business logic in controllers or handlers.
+7. [FILL IN: e.g. Enforce WorkspaceId / TenantId scoping on all queries.]
+8. Generate code only in the correct project folder per solution-structure.md.
+9. Do not refactor unrelated files.
+10. If unsure, ask before implementing.
+
+---
+
+## Before Every Task
+
+1. State which task you are implementing (from task-list.md).
+2. List which /doc files you loaded and why.
+3. List the files that will be modified.
+4. Confirm no schema changes are required.
+5. Then generate code.
+
+---
+
+## After Every Task
+
+- Update doc/progress.txt — current task pointer only (keep it short).
+- Create doc/Progress/Progress-N.txt (N = task number) with a brief task summary.
+- Append one line to doc/changelog.txt: `YYYY-MM-DD | Task N | Description`.
 ```
 
 ---
@@ -48,7 +70,7 @@ Do not proceed if any rules are unclear. Ask for clarification first.
 ## File 2: `subsequentprompt.md`
 
 ```
-Continue from progress.txt. Implement the next incomplete task only. After completing the task, update progress.txt summary and create an individual progress file in doc/Progress/ named Progress-N.txt (replace N with the task number). Update doc/changelog.txt with a new entry in the format: Date | Change | Description.
+Read doc/progress.txt. Implement the current task only. Do not re-read docs already loaded this session unless the task requires a different layer. After done: update doc/progress.txt, create doc/Progress/Progress-N.txt, append one line to doc/changelog.txt.
 ```
 
 ---
@@ -69,47 +91,50 @@ This template works with any AI coding assistant:
   - GitHub Copilot Chat
   - Windsurf, Cursor, Codeium, or any chat-based AI tool
 
-No AI-specific configuration is required. Just paste the prompts.
-
 
 BEFORE YOU START
 ----------------
-Fill in all [FILL IN: ...] placeholders across the /doc files to match your project.
+Fill in all [FILL IN: ...] placeholders to match your project.
+
 Files to fill in:
-  doc/ai-instruction.md      – Replace [PROJECT_NAME]
-  doc/architecture.md        – Tech stack, layers, naming conventions, rules
-  doc/solution-structure.md  – Project/folder layout using your project name
-  doc/database-schema.md     – Your tables/entities and fields
+  initialprompt.md           – AI role + project name (canonical rules file)
+  doc/architecture.md        – Tech stack, layers, naming conventions
+  doc/solution-structure.md  – Project/folder layout
+  doc/database-schema.md     – Tables/entities and fields
   doc/domain-model.md        – Enums, invariants, business rules
-  doc/api-contract.md        – Your API endpoints
+  doc/api-contract.md        – API endpoints
   doc/security.md            – Roles and auth rules
   doc/ui-guideline.md        – Layout and UX rules (skip if backend-only)
   doc/coding-standard.md     – Language/framework-specific standards
   doc/task-list.md           – Your phased task breakdown
   doc/changelog.txt          – Start date
-  initialprompt.md           – AI role (e.g. Senior .NET Architect)
 
-The only file you do NOT need to change: subsequentprompt.md
+Files you do NOT need to change:
+  subsequentprompt.md        – Already optimized for follow-up sessions
+
+
+HOW RULES WORK (ONE SOURCE OF TRUTH)
+--------------------------------------
+All AI rules live in initialprompt.md only.
+Edit that one file — it applies to every tool.
 
 
 WORKFLOW
 --------
-1. INITIAL PROMPT
-   Paste the full text of initialprompt.md into your AI chat.
-   This gives the AI the full project context (reads all /doc files).
+1. INITIAL SESSION
+   Paste the full text of initialprompt.md into your AI chat to start.
 
-2. SUBSEQUENT PROMPTS
-   For every follow-up session, paste subsequentprompt.md instead.
-   The AI will continue from progress.txt and implement the next task.
+2. FOLLOW-UP SESSIONS
+   Paste subsequentprompt.md. The AI will read doc/progress.txt
+   and continue from the current task.
 
-3. AFTER EACH TASK COMPLETES
-   a. progress.txt is updated with a short summary of what's done.
-      Keep this file concise – it is sent to the AI every session and costs tokens.
-   b. A new doc/Progress/Progress-N.txt is created for the completed task
-      (replace N with the task number, e.g. Progress-1.txt).
+3. AFTER EACH TASK
+   a. doc/progress.txt is updated with the current task pointer (keep it short).
+   b. doc/Progress/Progress-N.txt is created with a task summary.
+   c. One line is appended to doc/changelog.txt.
 
 4. REPEAT
-   Keep calling subsequentprompt.md until all tasks in task-list.md are done.
+   Keep using subsequentprompt.md until all tasks in task-list.md are done.
 
 5. NEW FEATURES
    Add new tasks to task-list.md under a new phase and continue.
@@ -117,64 +142,33 @@ WORKFLOW
 
 TOKEN EFFICIENCY DESIGN
 ------------------------
-- Full /doc files are read once (initial prompt only).
-- Only progress.txt is sent on every subsequent prompt – keep it short.
-- Detailed per-task logs go in doc/Progress/ – not sent unless needed.
+- initialprompt.md is loaded once per project (initial session only).
+- subsequentprompt.md + doc/progress.txt are the only things sent each follow-up.
+- Docs are tiered: architecture/task-list always load; schema/api load on demand.
+- Detailed per-task logs go in doc/Progress/ — not sent unless needed.
 
 
 TIPS FOR SPECIFIC AI TOOLS
 ----------------------------
 Claude Code (CLI):
-  Add a CLAUDE.md at the project root pointing to /doc files for
-  automatic context loading on every session.
+  Create a CLAUDE.md at the project root with one line:
+    "Read and follow all rules in initialprompt.md before any action."
+  Claude Code auto-loads it every session.
 
 Cursor / Windsurf:
-  Add a .cursorrules or .windsurfrules file referencing the /doc folder
-  so the AI picks up your architecture rules automatically.
+  Create a .cursorrules or .windsurfrules file with the same one-liner.
+
+GitHub Copilot:
+  Create .github/copilot-instructions.md with the same one-liner.
 
 ChatGPT / Gemini:
-  Paste initialprompt.md in a new chat, then attach or paste the relevant
-  /doc files when asked. Use a Project (ChatGPT) or Gem (Gemini) to persist context.
-
-GitHub Copilot Chat:
-  Open the /doc folder in VS Code and reference files inline with #file
-  when chatting (e.g. #file:doc/architecture.md).
+  Paste initialprompt.md in a new chat. Use a ChatGPT Project or
+  Gemini Gem to persist context across sessions.
 ```
 
 ---
 
-## File 4: `doc/ai-instruction.md`
-
-```
-# AI Development Rules
-
-You are assisting in developing [PROJECT_NAME].
-
-STRICT RULES:
-1. Only implement tasks listed in task-list.md.
-2. Do NOT modify database-schema.md unless explicitly instructed.
-3. Do NOT invent new fields.
-4. Always check architecture.md before coding.
-5. If unsure, ask before implementing.
-6. [FILL IN: e.g. Never skip WorkspaceId / TenantId filtering on queries.]
-7. Always update progress.txt after completing a task.
-
-When generating code:
-- Follow the architecture defined in architecture.md.
-- Use proper dependency injection.
-- Add minimal necessary comments only.
-- Do not refactor unrelated files.
-
-Before coding:
-1. Restate which task you are implementing.
-2. List files that will be modified.
-3. Confirm no schema changes are required.
-4. Then generate code.
-```
-
----
-
-## File 5: `doc/architecture.md`
+## File 4: `doc/architecture.md`
 
 ```
 # Architecture – [PROJECT_NAME]
@@ -213,7 +207,7 @@ Before coding:
 
 ---
 
-## File 6: `doc/solution-structure.md`
+## File 5: `doc/solution-structure.md`
 
 ```
 # Solution Structure – [PROJECT_NAME]
@@ -360,7 +354,7 @@ Any deviation must be rejected.
 
 ---
 
-## File 7: `doc/database-schema.md`
+## File 6: `doc/database-schema.md`
 
 ```
 # Database Schema
@@ -399,7 +393,7 @@ Any deviation must be rejected.
 
 ---
 
-## File 8: `doc/domain-model.md`
+## File 7: `doc/domain-model.md`
 
 ```
 # Domain Model Rules
@@ -424,7 +418,7 @@ Any deviation must be rejected.
 
 ---
 
-## File 9: `doc/api-contract.md`
+## File 8: `doc/api-contract.md`
 
 ```
 # API Contract
@@ -464,7 +458,7 @@ PUT /api/[resource2]/{parentId}/[subresource]/{id}
 
 ---
 
-## File 10: `doc/security.md`
+## File 9: `doc/security.md`
 
 ```
 # Security Model
@@ -488,7 +482,7 @@ PUT /api/[resource2]/{parentId}/[subresource]/{id}
 
 ---
 
-## File 11: `doc/ui-guideline.md`
+## File 10: `doc/ui-guideline.md`
 
 ```
 # UI Guidelines
@@ -512,7 +506,7 @@ PUT /api/[resource2]/{parentId}/[subresource]/{id}
 
 ---
 
-## File 12: `doc/coding-standard.md`
+## File 11: `doc/coding-standard.md`
 
 ```
 # Coding Standards
@@ -528,7 +522,7 @@ PUT /api/[resource2]/{parentId}/[subresource]/{id}
 
 ---
 
-## File 13: `doc/task-list.md`
+## File 12: `doc/task-list.md`
 
 ```
 # Master Task List
@@ -564,24 +558,7 @@ PUT /api/[resource2]/{parentId}/[subresource]/{id}
 
 ---
 
-## File 14: `doc/llm-checklist.md`
-
-```
-# Pre-Code Checklist
-
-Before any code generation, confirm:
-
-[ ] Architecture rules followed (see architecture.md)
-[ ] No schema invention – only fields in database-schema.md
-[ ] [FILL IN: e.g. TenantId / WorkspaceId scoping enforced on all queries]
-[ ] Correct project layer / folder targeted (see solution-structure.md)
-[ ] No business logic in controllers / handlers
-[ ] Task scope respected – only one task at a time
-```
-
----
-
-## File 15: `doc/changelog.txt`
+## File 13: `doc/changelog.txt`
 
 ```
 # Changelog
@@ -596,21 +573,20 @@ Date | Change | Description
 
 ---
 
-## File 16: `doc/progress.txt`
+## File 14: `doc/progress.txt`
 
 ```
 # Progress
 
-## Current Status
-Project not started.
+CURRENT TASK: [Task number] — [Task name]
+LAST COMPLETED: None — project not started
 
-## Summary
-Waiting to begin Phase 1: Foundation
+> Full per-task logs are in doc/Progress/Progress-N.txt
 ```
 
 ---
 
-## File 17: `doc/Progress/Progress-N.txt`
+## File 15: `doc/Progress/Progress-N.txt`
 
 ```
 # Task Progress - Task N
@@ -630,7 +606,7 @@ Waiting to begin Phase 1: Foundation
 
 ---
 
-After writing all 17 files, print:
+After writing all 15 files, print:
 
 ```
 ✅ ContextForge template created successfully!
@@ -639,7 +615,6 @@ Files created:
   initialprompt.md
   subsequentprompt.md
   README.txt
-  doc/ai-instruction.md
   doc/architecture.md
   doc/solution-structure.md
   doc/database-schema.md
@@ -649,7 +624,6 @@ Files created:
   doc/ui-guideline.md
   doc/coding-standard.md
   doc/task-list.md
-  doc/llm-checklist.md
   doc/changelog.txt
   doc/progress.txt
   doc/Progress/Progress-N.txt
