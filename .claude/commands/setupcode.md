@@ -60,6 +60,18 @@ Continue from progress.txt. Implement the next incomplete task only. After compl
   AI CODING TEMPLATE – SETUP & USAGE GUIDE
 ===================================================
 
+COMPATIBLE WITH ANY AI AGENT
+------------------------------
+This template works with any AI coding assistant:
+  - Claude (claude.ai, Claude Code, Cursor with Claude)
+  - ChatGPT / GPT-4o (OpenAI)
+  - Gemini (Google)
+  - GitHub Copilot Chat
+  - Windsurf, Cursor, Codeium, or any chat-based AI tool
+
+No AI-specific configuration is required. Just paste the prompts.
+
+
 BEFORE YOU START
 ----------------
 Fill in all [FILL IN: ...] placeholders across the /doc files to match your project.
@@ -108,6 +120,25 @@ TOKEN EFFICIENCY DESIGN
 - Full /doc files are read once (initial prompt only).
 - Only progress.txt is sent on every subsequent prompt – keep it short.
 - Detailed per-task logs go in doc/Progress/ – not sent unless needed.
+
+
+TIPS FOR SPECIFIC AI TOOLS
+----------------------------
+Claude Code (CLI):
+  Add a CLAUDE.md at the project root pointing to /doc files for
+  automatic context loading on every session.
+
+Cursor / Windsurf:
+  Add a .cursorrules or .windsurfrules file referencing the /doc folder
+  so the AI picks up your architecture rules automatically.
+
+ChatGPT / Gemini:
+  Paste initialprompt.md in a new chat, then attach or paste the relevant
+  /doc files when asked. Use a Project (ChatGPT) or Gem (Gemini) to persist context.
+
+GitHub Copilot Chat:
+  Open the /doc folder in VS Code and reference files inline with #file
+  when chatting (e.g. #file:doc/architecture.md).
 ```
 
 ---
@@ -317,7 +348,7 @@ Architecture: [FILL IN: e.g. Clean Architecture + CQRS + MediatR / Layered MVC]
 
 # AI Instruction
 
-Claude must:
+The AI must:
 - Follow this structure strictly.
 - Not invent new projects or layers.
 - Not merge layers.
