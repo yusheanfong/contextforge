@@ -1,8 +1,8 @@
 # ContextForge
 
-Scaffold a complete AI-assisted coding workflow in seconds — works with any AI (Claude, ChatGPT, Gemini, Copilot, Cursor, Windsurf, and more).
+Scaffold a complete AI-assisted coding workflow for Claude Code in seconds.
 
-Run the setup prompt and get 15 template files — a structured `/doc` folder, session prompts, changelogs, and progress tracking — ready to fill in for any project.
+Run `/setupcode` and get 15 template files — a structured `/doc` folder, session prompts, changelogs, and progress tracking — ready to fill in for any project.
 
 ---
 
@@ -10,8 +10,9 @@ Run the setup prompt and get 15 template files — a structured `/doc` folder, s
 
 ```
 your-project/
-├── initialprompt.md          ← All AI rules + context (paste once to start)
-├── subsequentprompt.md       ← Paste every follow-up session to continue
+├── CLAUDE.md                 ← Final goal + doc navigation (created by /final-goal)
+├── initialprompt.md          ← All AI rules + context
+├── subsequentprompt.md       ← Continue from where you left off
 ├── README.txt                ← Usage guide
 └── doc/
     ├── architecture.md       ← Tech stack + architecture style
@@ -35,13 +36,9 @@ All files use `[FILL IN: ...]` placeholders — replace them with your project d
 
 ## Commands
 
-### `/setupcode`
-
-Scaffolds the full project template — 15 files including `initialprompt.md`, `subsequentprompt.md`, and the entire `/doc` folder.
-
 ### `/final-goal <description>`
 
-Creates a `CLAUDE.md` at your project root. Takes your raw project description, rephrases it into a polished goal statement, and includes the full doc folder navigation guide so the AI always knows which files to load.
+Creates `CLAUDE.md` at your project root. Takes your raw project description, rephrases it into a polished goal statement, and includes the full doc folder navigation guide so Claude always knows which files to load.
 
 ```
 /final-goal Build a multi-tenant SaaS task management platform
@@ -49,20 +46,20 @@ Creates a `CLAUDE.md` at your project root. Takes your raw project description, 
 
 **What it creates (`CLAUDE.md`):**
 - Enhanced final goal (2–4 polished sentences)
-- Reference to `initialprompt.md` for all AI rules
+- Reference to `initialprompt.md` for all rules
 - Doc navigation guide — which files to always load vs. load on demand
 
-> Run `/final-goal` first to define what you're building, then `/setupcode` to scaffold the full template.
+### `/setupcode`
+
+Scaffolds the full project template — 15 files including `initialprompt.md`, `subsequentprompt.md`, and the entire `/doc` folder.
+
+> Run `/final-goal` first to define what you're building, then `/setupcode` to scaffold the template.
 
 ---
 
 ## Install
 
-### Option A — Paste into any AI chat (no setup required)
-
-Copy the raw content of [`setupcode.md`](https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/setupcode.md) and paste it into any AI chat (ChatGPT, Claude, Gemini, Copilot, etc.). The AI will create all 15 files in your project folder.
-
-### Option B — Claude Code slash commands (project-level)
+### Option A — Project-level (this project only)
 
 ```bash
 mkdir -p .claude/commands
@@ -72,9 +69,7 @@ curl -o .claude/commands/final-goal.md \
   https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/final-goal.md
 ```
 
-Then type `/final-goal <your project description>` and `/setupcode` inside Claude Code.
-
-### Option C — Claude Code slash commands (global, all projects)
+### Option B — Global (available in all projects)
 
 ```bash
 mkdir -p ~/.claude/commands
@@ -84,8 +79,6 @@ curl -o ~/.claude/commands/final-goal.md \
   https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/final-goal.md
 ```
 
-Then type `/final-goal` and `/setupcode` in any project.
-
 ---
 
 ## Usage
@@ -94,51 +87,25 @@ Then type `/final-goal` and `/setupcode` in any project.
 2. Run `/setupcode` to generate the `/doc` folder and prompt files
 3. Fill in all `[FILL IN: ...]` placeholders across the `/doc` files
     OR
-   Give Claude (or your model of choice) the prompt of your project, and tell it to structure a plan for you and fill in the files
-4. Tell your model to read `initialprompt.md` to start your first session
-5. Use `subsequentprompt.md` for every session after that
+   Ask Claude to read your project prompt and fill in the files for you
+4. Claude auto-loads `CLAUDE.md` every session — no manual paste needed
 
 ```
-Session 1:  paste initialprompt.md    →  AI reads /doc files, implements Task 1
-Session 2+: paste subsequentprompt.md →  AI continues from progress.txt
+Session 1:  Claude reads CLAUDE.md + initialprompt.md  →  implements Task 1
+Session 2+: paste subsequentprompt.md                  →  continues from progress.txt
 ```
 
 **Token efficiency:** Docs are tiered — architecture and task list load every session; schema, API, and domain docs load only when the task requires them. Only `progress.txt` (a 3-line pointer) is sent on follow-up sessions.
 
 ---
 
-## How the AI stays on track
+## How Claude stays on track
 
 - Reads `task-list.md` to know what to build next
 - Updates `progress.txt` after each task (short pointer — not a full history)
 - Updates `changelog.txt` after every change
 - Writes detailed logs to `doc/Progress/Progress-N.txt`
 - Never invents schema, fields, or endpoints not defined in your docs
-
----
-
-## Auto-load for specific tools
-
-All rules live in `initialprompt.md`. For tools that support auto-loading, create a one-liner file pointing to it:
-
-| Tool | File to create | Content |
-|---|---|---|
-| Claude Code | `CLAUDE.md` | `Read and follow all rules in initialprompt.md before any action.` |
-| Cursor | `.cursorrules` | same |
-| Windsurf | `.windsurfrules` | same |
-| GitHub Copilot | `.github/copilot-instructions.md` | same |
-
----
-
-## Compatible AI tools
-
-| Tool | How to use |
-|---|---|
-| **Claude Code** | Install via Option B or C above, then `/setupcode` |
-| **ChatGPT / Gemini** | Paste `setupcode.md` content into chat (Option A) |
-| **Cursor / Windsurf** | Paste `setupcode.md` into AI panel |
-| **GitHub Copilot** | Paste `setupcode.md` into Copilot Chat |
-| **Any other AI** | Paste `setupcode.md` content — it works in any chat |
 
 ---
 

@@ -82,14 +82,10 @@ Read doc/progress.txt. Implement the current task only. Do not re-read docs alre
   AI CODING TEMPLATE – SETUP & USAGE GUIDE
 ===================================================
 
-COMPATIBLE WITH ANY AI AGENT
-------------------------------
-This template works with any AI coding assistant:
-  - Claude (claude.ai, Claude Code, Cursor with Claude)
-  - ChatGPT / GPT-4o (OpenAI)
-  - Gemini (Google)
-  - GitHub Copilot Chat
-  - Windsurf, Cursor, Codeium, or any chat-based AI tool
+FOR CLAUDE CODE
+---------------
+This template is designed for Claude Code (CLI).
+Run /final-goal and /setupcode to get started.
 
 
 BEFORE YOU START
@@ -116,16 +112,16 @@ Files you do NOT need to change:
 HOW RULES WORK (ONE SOURCE OF TRUTH)
 --------------------------------------
 All AI rules live in initialprompt.md only.
-Edit that one file — it applies to every tool.
+CLAUDE.md auto-loads every session and points Claude to initialprompt.md.
 
 
 WORKFLOW
 --------
 1. INITIAL SESSION
-   Paste the full text of initialprompt.md into your AI chat to start.
+   Claude auto-loads CLAUDE.md. No manual paste needed.
 
 2. FOLLOW-UP SESSIONS
-   Paste subsequentprompt.md. The AI will read doc/progress.txt
+   Paste subsequentprompt.md. Claude will read doc/progress.txt
    and continue from the current task.
 
 3. AFTER EACH TASK
@@ -142,28 +138,10 @@ WORKFLOW
 
 TOKEN EFFICIENCY DESIGN
 ------------------------
-- initialprompt.md is loaded once per project (initial session only).
+- CLAUDE.md is auto-loaded every session by Claude Code.
 - subsequentprompt.md + doc/progress.txt are the only things sent each follow-up.
 - Docs are tiered: architecture/task-list always load; schema/api load on demand.
 - Detailed per-task logs go in doc/Progress/ — not sent unless needed.
-
-
-TIPS FOR SPECIFIC AI TOOLS
-----------------------------
-Claude Code (CLI):
-  Create a CLAUDE.md at the project root with one line:
-    "Read and follow all rules in initialprompt.md before any action."
-  Claude Code auto-loads it every session.
-
-Cursor / Windsurf:
-  Create a .cursorrules or .windsurfrules file with the same one-liner.
-
-GitHub Copilot:
-  Create .github/copilot-instructions.md with the same one-liner.
-
-ChatGPT / Gemini:
-  Paste initialprompt.md in a new chat. Use a ChatGPT Project or
-  Gemini Gem to persist context across sessions.
 ```
 
 ---
