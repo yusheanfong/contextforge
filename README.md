@@ -33,43 +33,70 @@ All files use `[FILL IN: ...]` placeholders — replace them with your project d
 
 ---
 
+## Commands
+
+### `/setupcode`
+
+Scaffolds the full project template — 15 files including `initialprompt.md`, `subsequentprompt.md`, and the entire `/doc` folder.
+
+### `/final-goal <description>`
+
+Creates a `CLAUDE.md` at your project root. Takes your raw project description, rephrases it into a polished goal statement, and includes the full doc folder navigation guide so the AI always knows which files to load.
+
+```
+/final-goal Build a multi-tenant SaaS task management platform
+```
+
+**What it creates (`CLAUDE.md`):**
+- Enhanced final goal (2–4 polished sentences)
+- Reference to `initialprompt.md` for all AI rules
+- Doc navigation guide — which files to always load vs. load on demand
+
+> Run `/final-goal` first to define what you're building, then `/setupcode` to scaffold the full template.
+
+---
+
 ## Install
 
 ### Option A — Paste into any AI chat (no setup required)
 
 Copy the raw content of [`setupcode.md`](https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/setupcode.md) and paste it into any AI chat (ChatGPT, Claude, Gemini, Copilot, etc.). The AI will create all 15 files in your project folder.
 
-### Option B — Claude Code slash command (project-level)
+### Option B — Claude Code slash commands (project-level)
 
 ```bash
-mkdir -p .claude/commands && curl -o .claude/commands/setupcode.md \
+mkdir -p .claude/commands
+curl -o .claude/commands/setupcode.md \
   https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/setupcode.md
+curl -o .claude/commands/final-goal.md \
+  https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/final-goal.md
 ```
 
-Then type `/setupcode` inside Claude Code.
+Then type `/final-goal <your project description>` and `/setupcode` inside Claude Code.
 
-### Option C — Claude Code slash command (global, all projects)
+### Option C — Claude Code slash commands (global, all projects)
 
 ```bash
-mkdir -p ~/.claude/commands && curl -o ~/.claude/commands/setupcode.md \
+mkdir -p ~/.claude/commands
+curl -o ~/.claude/commands/setupcode.md \
   https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/setupcode.md
+curl -o ~/.claude/commands/final-goal.md \
+  https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/final-goal.md
 ```
 
-Then type `/setupcode` in any project.
+Then type `/final-goal` and `/setupcode` in any project.
 
 ---
 
 ## Usage
 
-1. Run the setup (any option above) to generate the `/doc` folder and prompt files
-
-2. Fill in all `[FILL IN: ...]` placeholders across the `/doc` files
+1. Run `/final-goal <description>` to create `CLAUDE.md` with your project goal
+2. Run `/setupcode` to generate the `/doc` folder and prompt files
+3. Fill in all `[FILL IN: ...]` placeholders across the `/doc` files
     OR
-   Give Claude(Or Your Model of Choice) the prompt of your project, and tell it to structure a plan for you and fill in the files
-   
-3. Tell your Model to read `initialprompt.md` to start your first session
-   
-4. Use `subsequentprompt.md` for every session after that
+   Give Claude (or your model of choice) the prompt of your project, and tell it to structure a plan for you and fill in the files
+4. Tell your model to read `initialprompt.md` to start your first session
+5. Use `subsequentprompt.md` for every session after that
 
 ```
 Session 1:  paste initialprompt.md    →  AI reads /doc files, implements Task 1
