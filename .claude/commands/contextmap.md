@@ -84,6 +84,43 @@ When Graphify runs for the first time (after code exists), run /contextmap sync 
 3. Update doc/progress.txt after every completed task.
 4. Update doc/changelog.txt after every change (format: Date | Change | Description).
 5. Follow doc/solution-structure.md exactly — no structural changes.
+
+## Coding Rules
+
+### Think Before Coding
+State assumptions before acting. If uncertain, ask — don't guess.
+- Multiple interpretations → present them, don't silently pick one
+- Simpler approach exists → say so and push back
+- Confused by a requirement → name what's confusing, stop, ask
+
+### Simplicity First
+Write the minimum code that solves the stated problem. Nothing speculative.
+- No features beyond what was asked
+- No abstractions for single-use code
+- No "future flexibility" that wasn't requested
+- No error handling for impossible scenarios
+- If it could be half the length, rewrite it
+
+### Surgical Changes
+Touch only what the task requires. Match existing style.
+- Don't improve adjacent code, formatting, or comments
+- Don't refactor things that aren't broken
+- If you notice unrelated dead code, mention it — don't delete it
+- Remove imports/variables/functions YOUR changes made unused; leave pre-existing dead code alone
+
+Every changed line must trace directly to the user's request.
+
+### Goal-Driven Execution
+Define what "done" looks like before writing code.
+
+Turn tasks into verifiable goals:
+- "Add validation" → tests for invalid inputs pass
+- "Fix the bug" → test reproduces it, then it passes
+- "Refactor X" → tests pass before and after; nothing changed externally
+
+For multi-step tasks, state a brief plan with a verify step per step:
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
 ```
 
 **File 2: `doc/architecture.md`**
@@ -520,6 +557,43 @@ Edit ONLY outside these markers.
 3. Update doc/progress.txt after every completed task.
 4. Update doc/changelog.txt after every change (format: Date | Change | Description).
 5. Follow doc/solution-structure.md exactly.
+
+## Coding Rules
+
+### Think Before Coding
+State assumptions before acting. If uncertain, ask — don't guess.
+- Multiple interpretations → present them, don't silently pick one
+- Simpler approach exists → say so and push back
+- Confused by a requirement → name what's confusing, stop, ask
+
+### Simplicity First
+Write the minimum code that solves the stated problem. Nothing speculative.
+- No features beyond what was asked
+- No abstractions for single-use code
+- No "future flexibility" that wasn't requested
+- No error handling for impossible scenarios
+- If it could be half the length, rewrite it
+
+### Surgical Changes
+Touch only what the task requires. Match existing style.
+- Don't improve adjacent code, formatting, or comments
+- Don't refactor things that aren't broken
+- If you notice unrelated dead code, mention it — don't delete it
+- Remove imports/variables/functions YOUR changes made unused; leave pre-existing dead code alone
+
+Every changed line must trace directly to the user's request.
+
+### Goal-Driven Execution
+Define what "done" looks like before writing code.
+
+Turn tasks into verifiable goals:
+- "Add validation" → tests for invalid inputs pass
+- "Fix the bug" → test reproduces it, then it passes
+- "Refactor X" → tests pass before and after; nothing changed externally
+
+For multi-step tasks, state a brief plan with a verify step per step:
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
 ```
 
 **doc/architecture.md**:
