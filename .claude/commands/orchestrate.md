@@ -1,0 +1,453 @@
+# /orchestrate — CI/CD-Gated Autonomous Feature Pipeline
+
+Take one feature request and run it end-to-end: parse intent → decompose → branch → dispatch
+graph-scoped worker subagents → run CI quality gates → commit per subtask → report. Asks
+questions **only when the request is genuinely ambiguous**; otherwise runs hands-off.
+
+This is a hierarchical multi-agent pipeline (Coordinator → Worker → Critic → Synthesis) where each
+worker is fed ONLY the doc files and graph nodes its subtask touches. Context isolation is derived
+from `graphify-out/graph.json` (built by `/contextmap`), not hand-curated.
+
+Companion to `/contextmap`: contextmap builds the map, `/orchestrate` uses it to execute.
+Reads `$ARGUMENTS` as the feature request.
+
+**What changed from the old behavior:** `/orchestrate` now creates a feature branch and commits per
+subtask. This **reverses the old "never commit, history stays yours" rule** — it is intentional. It
+never tags and never merges to `main` — you own releases. If you want the old hands-off-git
+behavior, pass **`--no-commit`**: the full pipeline + gates run, but no branch and no commits are
+made (you review the working tree and commit yourself).
+
+**Roles (mapped from the multi-agent blueprint):** Coordinator = intent-parse + decompose · Engineer
+= worker subagent that edits code + writes tests · QA/Critic = the CI gate runner + review loop ·
+Synthesis = final report + release-readiness.
+
+**Global state object** — track these across phases and surface them in the final report:
+`branch`, `subtasks[]` (goal, criterion, deps, independent, gate_set, status, commit_sha),
+`gate_results`, `files_changed`, `commits[]`, `all_gates_pass`.
+
+---
+
+## PHASE 0: Intent Parsing & Clarification *(Coordinator / Router)*
+
+### 0a. Graph prerequisite — hard-stop
+
+`/orchestrate` is graph-driven. Use the Read tool (or a file check) for `graphify-out/graph.json`
+in the current directory.
+
+If it does NOT exist, print this exact message and STOP — do nothing else (do not auto-run
+`/contextmap`; the user builds the graph manually):
+
+```
+❌ /orchestrate is graph-driven and needs graphify-out/graph.json.
+Run /contextmap first to build the knowledge graph, then re-run /orchestrate.
+```
+
+### 0b. Resolve the Python interpreter as `[PYTHON_CMD]`
+
+1. If `graphify-out/.graphify_python` exists, read it — that one line is the interpreter path
+   graphify already validated (uv/pipx/venv-aware). Use it verbatim as `[PYTHON_CMD]`.
+2. Otherwise, detect with the Bash tool:
+   ```bash
+   python --version 2>&1 || python3 --version 2>&1
+   ```
+   Use whichever of `python` / `python3` works and is ≥ 3.10. If neither is ≥ 3.10, print:
+   ```
+   ❌ /orchestrate needs Python 3.10+ to read the graph. Install it, then re-run.
+   ```
+   and STOP.
+
+### 0c. Graph freshness note (print, don't block)
+
+`/orchestrate` reads whatever `graph.json` currently exists — it never rebuilds it. The post-commit
+hook refreshes the graph on every `git commit`, so committed edits are already reflected.
+
+Check for uncommitted changes (best-effort — ignore failure):
+```bash
+git status --porcelain 2>/dev/null
+```
+If there are uncommitted changes that look structural (new/renamed source files), print once:
+```
+ℹ️ Uncommitted structural changes won't be in the graph slice — run /contextmap sync or commit
+   first for the most accurate routing. (Workers still read live code, so this only affects which
+   files they're pointed at, not correctness.)
+```
+Do not force a sync. Continue.
+
+### 0d. Resolve the request
+
+First, parse flags out of `$ARGUMENTS`: if it contains **`--no-commit`**, set `[NO_COMMIT] = true`
+and strip the flag from the text. Otherwise `[NO_COMMIT] = false`. Under `[NO_COMMIT]` the pipeline
+runs every phase and gate but makes NO branch and NO commits — it leaves changes in the working
+tree for the user to review and commit.
+
+- If `$ARGUMENTS` (flags stripped) is non-empty, that is the request.
+- If `$ARGUMENTS` is empty:
+  - If `doc/task-list.md` exists, read it and offer the next incomplete `[ ]` task. Wait for
+    confirmation.
+  - Otherwise ask: `"What feature should I orchestrate?"` and wait.
+
+Store the request as `[TASK]`.
+
+### 0e. Ambiguity scan — the "ask only if unclear" rule
+
+Evaluate `[TASK]` for genuine ambiguity: unclear **scope** (how much is in/out), missing
+**acceptance criteria** (what "done" looks like), or unclear **affected area** (which part of the
+codebase). Cross-check against the graph slice (Phase 3 tooling) and docs.
+
+- **If genuinely ambiguous** → use `AskUserQuestion` with specific options. **Never guess on real
+  ambiguity.** Wait for the answer.
+- **If clear enough to proceed** → state your assumptions in one line and continue. Do NOT
+  manufacture questions for a clear request.
+
+### 0f. Derive the feature branch name
+
+**If `[NO_COMMIT]` is true, skip this step** — no branch is created; jump to Phase 1 and ignore the
+branch references throughout.
+
+Slugify `[TASK]` into `feature/<slug>` (e.g. "create a feature where the login button works" →
+`feature/login-button-works`). Store as `[BRANCH]`.
+
+- If you are asking clarifying questions in 0e anyway, fold in a branch-name confirmation.
+- If no questions were needed, announce: `Branch: [BRANCH] — proceeding (reply to rename).` and
+  continue without blocking.
+
+---
+
+## PHASE 1: Decompose / Micro-plan *(Coordinator = PM agent)*
+
+Break `[TASK]` into an ordered list of subtasks. For each subtask record:
+
+- **goal** — one line
+- **success criterion** — a verifiable check (test passes, output matches, file exists)
+- **depends on** — which earlier subtasks must finish first (or `none`)
+- **independent** — `yes` if it can run in parallel with its siblings, else `no`
+- **gate set** — which CI gates apply (default: all detected; note any to skip, e.g. docs-only edit)
+
+Initialize the global state object with these subtasks.
+
+Print the decomposition for transparency, then **proceed immediately — no approval stop**
+(clarify-then-run):
+
+```
+Plan for [TASK] (branch [BRANCH]):
+
+Subtask 1: [goal]
+  success: [criterion]   depends on: none   independent: yes   gates: lint,test,audit
+Subtask 2: [goal]
+  success: [criterion]   depends on: 1      independent: no    gates: lint,test
+...
+
+Running now. I'll stop only if a request is ambiguous or a gate fails 3×.
+```
+
+---
+
+## PHASE 2: Branch Setup *(enables auto-commit)*
+
+**If `[NO_COMMIT]` is true, skip this entire phase** — no branch, no dirty-tree prompt; workers
+edit the current tree in place and the user commits later.
+
+1. **Dirty-tree check** (the one legitimate blocking question):
+   ```bash
+   git status --porcelain 2>/dev/null
+   ```
+   If the tree is dirty, ASK before proceeding — stash (`git stash push -u`) or abort. Do not
+   silently discard or commit the user's pending work.
+
+2. **Create + checkout the branch:**
+   ```bash
+   git checkout -b [BRANCH]
+   ```
+   If `[BRANCH]` already exists, check it out and note it.
+
+3. **Merge-conflict pre-check** vs the base branch (checklist: "automated merge conflict detection"):
+   ```bash
+   git fetch 2>/dev/null; git merge-base --is-ancestor origin/main HEAD 2>/dev/null
+   ```
+   If the branch base is behind `main` / a conflict looks likely, print a one-line warning. Do not
+   block.
+
+---
+
+## PHASE 3: Per-Subtask Context Assembly *(RAG — the core)*
+
+For each subtask, build an **isolated context payload**. This payload is the ENTIRE context the
+worker will see — it never inherits this session's history.
+
+### 3a. Graph slice
+
+Write this script to `graphify-out/.orchestrate_slice.py` (once), then run it per subtask. It
+loads the graph exactly as graphify/contextmap do (`node_link_graph(..., edges='links')`),
+finds nodes matching the subtask's key terms, then expands to their community plus a BFS
+neighborhood, and prints the touched source files + node labels + key edges.
+
+```python
+import sys, json
+from pathlib import Path
+import networkx as nx
+from networkx.readwrite import json_graph
+
+data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
+G = json_graph.node_link_graph(data, edges='links')
+
+terms = [t.lower() for t in ' '.join(sys.argv[1:]).split() if len(t) > 3]
+
+def label_of(n):
+    return G.nodes[n].get('label', str(n))
+
+# 1) seed nodes: best label-term overlap
+scored = []
+for n, d in G.nodes(data=True):
+    lab = str(d.get('label', '')).lower()
+    s = sum(1 for t in terms if t in lab)
+    if s:
+        scored.append((s, n))
+scored.sort(reverse=True)
+seeds = [n for _, n in scored[:5]]
+
+if not seeds:
+    print('NO_MATCH'); sys.exit(0)
+
+# 2) community-mates of seeds
+seed_comms = {G.nodes[n].get('community') for n in seeds if G.nodes[n].get('community') is not None}
+slice_nodes = set(seeds)
+for n, d in G.nodes(data=True):
+    if d.get('community') in seed_comms:
+        slice_nodes.add(n)
+
+# 3) BFS neighborhood (depth 2) from seeds
+frontier = set(seeds)
+for _ in range(2):
+    nxt = set()
+    for n in frontier:
+        for nb in G.neighbors(n):
+            if nb not in slice_nodes:
+                nxt.add(nb)
+    slice_nodes |= nxt
+    frontier = nxt
+
+# 4) emit
+files = sorted({G.nodes[n].get('source_file') for n in slice_nodes if G.nodes[n].get('source_file')})
+print('FILES'); [print(' ', f) for f in files]
+print('NODES'); [print(' ', label_of(n)) for n in sorted(slice_nodes, key=label_of)[:40]]
+print('EDGES')
+seen = 0
+for u, v in G.edges():
+    if u in slice_nodes and v in slice_nodes and seen < 30:
+        raw = G[u][v]; e = next(iter(raw.values()), {}) if isinstance(G, nx.MultiGraph) else raw
+        print(f"  {label_of(u)} --{e.get('relation','')} [{e.get('confidence','')}]--> {label_of(v)}")
+        seen += 1
+```
+
+Run it with the subtask goal's key words as arguments:
+```bash
+[PYTHON_CMD] graphify-out/.orchestrate_slice.py "<subtask goal key words>"
+```
+
+If it prints `NO_MATCH`, the graph has no node for these terms — fall back to the universal docs
+only (3b) and tell the worker the graph had no specific match.
+
+*Optional accelerators (not required):* graphify's own `query` / `path` / `explain` inline
+scripts (see graphify SKILL.md), or `[PYTHON_CMD] -m graphify.serve graphify-out/graph.json`
+(MCP tools `get_community`, `get_neighbors`, `shortest_path`). All read the same `graph.json`;
+the script above is the dependency-free default.
+
+### 3b. Doc slice
+
+From the `FILES` the slice returned, pick the matching domain docs and ALWAYS add the three
+universal docs. Read only these — never the whole `doc/` set:
+
+- **Always:** `doc/architecture.md`, `doc/solution-structure.md`, `doc/coding-standard.md`
+- UI/screen/widget/view/component sources → `doc/ui-guideline.md`
+- controller/service/handler/endpoint/route/api sources → `doc/api-contract.md`
+- entity/model/enum/domain sources → `doc/domain-model.md`
+- auth/token/permission/role sources → `doc/security.md`
+
+(Keep this source→doc mapping aligned with `/contextmap`'s doc set — if contextmap renames a
+doc, update it here too.)
+
+### 3c. Instruction
+
+Assemble the worker prompt from: the subtask **goal** + **success criterion** + the graph slice
+(3a) + the doc slice text (3b) + these constraints, verbatim:
+
+```
+- Edit only the files needed for THIS subtask.
+- Write/update tests and run them; report results.
+- Keep lint/style clean — match the project's existing conventions.
+- Do NOT git commit and do NOT touch unrelated code.
+- If you lack context to proceed, stop and report NEEDS_CONTEXT with what's missing.
+- Return: what you changed (files + summary) and test results.
+```
+
+---
+
+## PHASE 4: Execution *(Worker = Engineer agent)*
+
+Use the Agent tool. **Default `subagent_type` is `general-purpose`** (the documented catch-all);
+use `Explore`/`Plan` only for read-only research subtasks.
+
+- **Independent subtasks** (no shared files, no dependency): dispatch IN PARALLEL — multiple
+  Agent calls in ONE message.
+- **Dependent subtasks**: dispatch sequentially. Pass the prior worker's COMPACTED summary
+  forward (a few lines: what changed + relevant outputs) — never its full transcript.
+
+Model selection: cheap/fast model for mechanical 1–2 file edits with a clear spec; a more
+capable model for multi-file integration or design judgment.
+
+Each worker receives ONLY its payload from Phase 3 — not this session's history. Workers edit
+code + write tests + run them, and do **NOT** commit. Committing happens in Phase 5 after gates pass.
+
+---
+
+## PHASE 5: CI Gate / Validation *(Critic = QA agent)*
+
+This is where the executable CI subset of the CI/CD checklist lives. After a worker returns, run
+the **adaptive gate runner**, then the review checks, then commit on pass.
+
+### 5a. Adaptive gate runner
+
+Detect available tooling from the project manifests (`package.json`, `pyproject.toml`,
+`requirements.txt`, `go.mod`, `*.csproj`, etc.), **run what exists, skip + honestly report what
+doesn't**. Never print a passing check for a gate you didn't actually run. Run in this order and
+record each result as `pass` / `fail` / `skipped (reason)`:
+
+1. **Lint / style** — e.g. `eslint`, `ruff check`, `flake8`, `dotnet format --verify-no-changes`,
+   `go vet`. (checklist: "linting and code style enforcement")
+2. **Tests** — e.g. `npm test`, `pytest`, `go test ./...`, `dotnet test`. MUST pass before commit.
+   (checklist: "tests run before allowing merge", "functional tests")
+   - **If NO test runner is detected at all:** the subtask's success criterion cannot be verified.
+     Do NOT record a `pass` and do NOT silently commit. Warn loudly and ask once:
+     ```
+     ⚠️ No test runner detected — I can't verify "[subtask success criterion]" actually works.
+        Proceed and commit unverified, or stop here?
+     ```
+     Record this gate as `unverified — no test tooling` in the results table regardless of choice.
+3. **Coverage** — add the runner's coverage flag if it supports one; enforce a threshold only if
+   the repo configures one. (checklist: "test coverage reporting")
+4. **Dependency-vuln scan** — `npm audit`, `pip-audit`, `dotnet list package --vulnerable`.
+   (checklist: "dependency vulnerability scanning / monitoring")
+5. **Secrets scan** — `gitleaks detect` if installed; else a regex fallback over the diff
+   (`git diff` for API keys, tokens, private keys). (checklist: "secrets scanning in code")
+   - **A secrets finding is a HARD BLOCK:** never commit, do NOT enter the retry loop (retrying
+     does not un-leak a secret), and surface the exact match location to the user immediately.
+     Stop the subtask and wait for the user to remove the secret.
+6. **SAST** — `semgrep --error` if installed; else `skipped (semgrep not installed)`. (checklist:
+   "SAST")
+
+### 5b. Review checks
+
+1. **Spec compliance** — does the worker output do exactly what the subtask asked (nothing
+   missing, nothing extra)?
+2. **Quality** — only after spec passes — is it well-built (tests real, no obvious smell)?
+
+Either dispatch a reviewer subagent (read-only) with the criterion + the worker's diff, or
+review directly.
+
+### 5c. Conditional routing loop (bounded)
+
+If any **gate** (5a) or **review check** (5b) FAILS, re-dispatch the SAME worker with the specific
+failures as an error log, and re-run 5a–5b.
+
+**Bounded loop: at most 3 iterations per subtask.** If still failing after 3, stop the loop and
+report it to the user — do not loop further.
+
+**Exception — secrets:** a secrets finding (5a gate 5) does NOT enter this loop. It hard-blocks the
+subtask immediately and waits for the user to remove the secret (see 5a). Retrying cannot fix it.
+
+Handle worker statuses:
+- **NEEDS_CONTEXT** → provide the missing context and re-dispatch.
+- **BLOCKED** → assess: more context (re-dispatch same model), more reasoning (re-dispatch
+  capable model), too large (split), or plan is wrong (escalate to user). Never silently retry
+  unchanged.
+
+### 5d. Commit on pass
+
+**If `[NO_COMMIT]` is true, skip committing entirely** — just mark the subtask complete and leave
+its changes in the working tree.
+
+Otherwise, when all gates + checks pass, the MAIN session commits. **Commits are serialized — never
+concurrent**, even when subtasks ran in parallel in Phase 4:
+
+1. Process passing subtasks **one at a time**, in completion order. Two `git commit`s never run at
+   once (the working tree + index are shared mutable state).
+2. Stage **only the files that THIS subtask's worker reported changing** — never `git add -A`:
+   ```bash
+   git add [exact files this worker reported]
+   git commit -m "[concise subtask summary]"
+   ```
+3. **Collision rule:** if two parallel subtasks both reported edits to the *same* file, do not split
+   them — collapse those subtasks into ONE combined commit covering both file lists, so a single
+   file is never half-committed across two commits.
+
+End every commit message with:
+```
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+```
+
+Record the commit SHA(s) in the subtask state. Mark the subtask complete.
+
+---
+
+## PHASE 6: Synthesis & Release *(Synthesis agent)*
+
+When all subtasks are complete:
+
+1. Collect the approved outputs, strip intermediate logs, and print a clean summary (below).
+   `/orchestrate` does **not** tag — releases/tags stay a manual step you run when you want one.
+2. Update `doc/progress.txt` with the current status.
+3. Append to `doc/changelog.txt` (`Date | Change | Description`, matching contextmap's format).
+4. If `[TASK]` came from `doc/task-list.md`, tick its `[ ]` → `[x]`.
+5. **Generate the CD release-readiness report** — write `doc/release-readiness.md`. Map every CD
+   checklist item `/orchestrate` cannot execute locally to a status/owner line, each marked
+   **"needs your CI/CD platform — not run locally."** Group them:
+   - Artifact / Docker image build, artifact repo storage
+   - Deploy to dev → staging → production
+   - E2E tests in a deployed env, cross-service integration tests
+   - Canary / blue-green, progressive rollout, traffic shifting
+   - Feature flags, automatic rollback triggers
+   - Health checks, structured logging, alerting, perf monitoring, dashboards
+   - Infrastructure-as-code, pipeline-as-code (GH Actions / Jenkinsfile)
+   - DAST, compliance / approval gates
+6. Print the final report (under `[NO_COMMIT]`, replace the Branch/Commits block with
+   `Mode: --no-commit — changes left in working tree for you to review and commit`):
+   ```
+   ✅ /orchestrate complete — [TASK]
+
+   Branch:  [BRANCH]
+   Commits: [N]
+     [sha] — [subtask summary]
+     ...
+
+   Files changed:
+     [path] — [one-line what/why]
+     ...
+
+   CI gate results:
+     lint        pass
+     tests       [pass / unverified — no test tooling]
+     coverage    [pass / skipped — no coverage tooling]
+     dep-vuln    [pass / N findings]
+     secrets     pass
+     SAST        [pass / skipped — semgrep not installed]
+
+   CD readiness: see doc/release-readiness.md (deploy/monitoring/rollback need your platform).
+
+   On branch [BRANCH] — merge it when you're happy.
+   ```
+7. Clean up: remove `graphify-out/.orchestrate_slice.py`.
+
+---
+
+## NOTES
+
+- **This command commits** (feature branch + per-subtask commits) — a deliberate reversal of the old
+  "never commit, history stays yours" rule. It never tags and never merges to `main` — you own
+  releases and the merge. Pass `--no-commit` to run the full pipeline with zero git writes.
+- It never rebuilds the graph and never auto-runs `/contextmap`. If `graphify-out/graph.json` is
+  missing it hard-stops and asks you to run `/contextmap` manually.
+- **Gates are adaptive and honest** — a repo with no lint/test/scan tooling gets `skipped — no
+  tooling detected`, never a fake green check.
+- **Local CI only.** The CD half of the checklist (deploy, canary, monitoring, rollback, DAST) is
+  reported in `doc/release-readiness.md`, not executed — it requires a real CI/CD platform.
+- The graph slice keeps each worker's context small regardless of repo size; that is the point.
