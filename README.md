@@ -1,10 +1,14 @@
 # ContextForge
 
-One command to scaffold a complete AI-assisted coding workflow for Claude Code — then keep it alive with a live knowledge graph that updates as your code evolves.
+A three-command suite for Claude Code that shares one live knowledge graph: scaffold the workflow, execute features against it, and sweep it for bloat — all reading the same map of your codebase.
 
 ```
-/contextmap
+/contextmap   → scaffold docs + build the graph   (start here)
+/orchestrate  → execute a feature against the graph
+/audit        → sweep the repo for over-engineering
 ```
+
+`/contextmap` is the entry point — the other two hard-stop until it has built the graph.
 
 ---
 
@@ -39,6 +43,35 @@ curl -o .claude/commands/contextmap.md \
 ```
 
 **For existing project analysis**, you also need Python 3.10+. `/contextmap` installs Graphify automatically when it needs it.
+
+---
+
+## Pipeline — Which Command When
+
+The three commands share one graph and run in a loop:
+
+```
+Setup (once)         /contextmap                → scaffold docs + build graph + post-commit hook
+Per feature          /orchestrate <feature>     → branch + graph-scoped agents + CI gates + commits
+                     → review the diff → merge the branch
+                     /contextmap sync           → refresh the <!-- graphify:auto --> doc fences
+Periodic / on-demand /audit                     → whole-repo bloat sweep (read-only)
+```
+
+**Sync comes *after* `/orchestrate`, not before.** `/orchestrate` updates `progress.txt`,
+`changelog.txt`, and `task-list.md` — but it does **not** refresh the `graphify:auto` doc fences.
+The post-commit hook rebuilds `graph.json` on every commit yet never writes docs. So run
+`/contextmap sync` after merging to pull the fresh graph into your docs.
+
+| Command | Use it when | Writes | Git |
+|---------|-------------|--------|-----|
+| `/contextmap` | Starting out, or refreshing docs after code changes (`sync`) | `doc/*`, `graph.json`, post-commit hook | never commits |
+| `/orchestrate <feature>` | Building a new feature end-to-end | code + tests, `release-readiness.md`, progress/changelog | commits per subtask on a branch (opt out with `--no-commit`) |
+| `/audit [path]` | Cleaning up accumulated bloat, before a refactor or release | nothing (report-only) | never commits |
+
+**`/audit` vs `/orchestrate`'s built-in review:** `/orchestrate` reviews a *single fresh diff* at
+commit time (its over-engineering gate). `/audit` sweeps *already-landed* code across the whole repo.
+Reach for `/audit` on-demand when cruft has piled up.
 
 ---
 
@@ -111,33 +144,72 @@ Flow:
 
 ## /orchestrate — Execute With the Map
 
-`/contextmap` builds the map. `/orchestrate` uses it to *execute*.
+`/contextmap` builds the map. `/orchestrate` uses it to *execute* a whole feature — a hierarchical
+multi-agent pipeline (Coordinator → Worker → Critic → Synthesis) where each worker subagent sees
+**only the docs and graph nodes its piece of the work touches** — context isolation derived from
+`graphify-out/graph.json`, not hand-curated.
 
 ```
 /orchestrate add input validation to the checkout endpoint
 ```
 
-It's a companion command that turns a task into a multi-agent run where each worker subagent sees
-**only the docs and graph nodes its piece of the work touches** — context isolation derived from
-`graphify-out/graph.json`, not hand-curated.
-
 Flow:
 1. **Hard stop** if no `graphify-out/graph.json` — run `/contextmap` first
-2. **Decompose** the task into subtasks (goal, success criterion, dependencies) — shown for your approval
-3. **Graph slice per subtask** — reads `graph.json`, finds the touched nodes' community + neighborhood, and pulls only the matching `doc/*` files (plus the three universal docs)
-4. **Dispatch workers** — parallel for independent subtasks, sequential for dependent ones; each worker gets only its slice
-5. **Bounded review loop** — spec then quality, max 3 iterations per subtask
-6. **Synthesize** — clean summary, updates `progress.txt` / `changelog.txt`, ticks the task
+2. **Clarify only if ambiguous** — asks about scope/criteria only for a genuinely unclear request; otherwise states its assumptions and runs hands-off
+3. **Branch** — creates `feature/<slug>` and works there
+4. **Decompose** the task into subtasks (goal, success criterion, dependencies, gate set)
+5. **Graph slice per subtask** — reads `graph.json`, finds the touched nodes' community + neighborhood, and pulls only the matching `doc/*` files (plus the three universal docs)
+6. **Dispatch workers** — 2+ independent subtasks each run in an isolated **git worktree** (real parallelism, overlapping edits surface as a visible merge conflict); lone/dependent subtasks run single-tree
+7. **CI gates** — adaptive and honest: lint, tests, coverage, dependency-vuln, secrets (hard block), SAST, over-engineering. Runs what your project has, skips + *honestly reports* what it doesn't — never a fake green check
+8. **Bounded review loop** — spec, then quality, then an over-engineering pass; max 3 iterations per subtask
+9. **Commit per subtask** on the branch once its gates pass
+10. **Synthesize** — clean summary, updates `progress.txt` / `changelog.txt`, ticks the task, and writes `doc/release-readiness.md` (the CD steps it can't run locally: deploy, canary, monitoring, rollback, DAST)
 
-Workers **implement (edit code + write tests) but never commit** — you review the diff and commit.
-`/orchestrate` never rebuilds the graph (that's `/contextmap sync` or the post-commit hook), so
-commit or sync first if you have uncommitted structural changes.
+**This command commits** — a feature branch with per-subtask commits. It never tags and never merges
+to `main`; **you own the release and the merge.** Pass **`--no-commit`** to run the full pipeline and
+all gates with zero git writes — changes are left in the working tree for you to review and commit
+yourself. `/orchestrate` never rebuilds the graph (that's `/contextmap sync` or the post-commit
+hook), so commit or sync first if you have uncommitted structural changes.
 
 **Install** (alongside contextmap):
 
 ```bash
 curl -o ~/.claude/commands/orchestrate.md \
   https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/orchestrate.md
+```
+
+Requires Python 3.10+ (to read the graph) and a project that has already run `/contextmap`.
+
+---
+
+## /audit — Sweep for Over-Engineering
+
+`/orchestrate` reviews the diff it just wrote. `/audit` sweeps code that **already landed** —
+the entire repo (or a scoped path) for accumulated bloat. **Report-only: never edits, never commits.**
+
+```
+/audit                    # whole repo
+/audit src/checkout       # scope to a path prefix
+```
+
+Like `/orchestrate`, it uses `graphify-out/graph.json` to point at candidates instead of blind-reading
+every file — then confirms each against the real source before flagging it (*the graph points, the
+code decides*).
+
+Flow:
+1. **Hard stop** if no `graphify-out/graph.json` — run `/contextmap` first
+2. **Graph scan** — surfaces three candidate buckets: orphans / near-dead nodes, duplicate labels across files, and god nodes (over-centralization)
+3. **Source confirmation** — opens each candidate's file and evaluates it against the minimal-code ladder (dead? duplicate? stdlib does it? one-liner?), dropping anything the code proves legitimate
+4. **Report** — a grouped delete/simplify list with a rung + rationale per finding, plus god-node structural notes framed as *decompose?* questions, and a summary count
+
+Pass **`--graph-only`** to skip source confirmation (faster, less precise) — every finding is then
+tagged `[unconfirmed]`. Tests and files needed for current behavior are never delete-listed.
+
+**Install** (alongside contextmap):
+
+```bash
+curl -o ~/.claude/commands/audit.md \
+  https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/audit.md
 ```
 
 Requires Python 3.10+ (to read the graph) and a project that has already run `/contextmap`.
@@ -165,6 +237,7 @@ your-project/
     ├── task-list.md             ← Master task list (100% yours — never graph-populated)
     ├── changelog.txt            ← Updated after every change
     ├── progress.txt             ← Current status (kept short)
+    ├── release-readiness.md     ← Written by /orchestrate — CD steps to run on your platform
     └── Progress/
         └── Progress-N.txt       ← Per-task detailed logs
 ```
@@ -276,7 +349,7 @@ Session N+1: fresh session → same auto-load → continue from progress.txt
 ## Requirements
 
 - Claude Code (any version)
-- Python 3.10+ (for Graphify — only needed for existing project analysis and sync; not required for new projects)
+- Python 3.10+ — needed for existing-project analysis, `/contextmap sync`, and both `/orchestrate` and `/audit` (they read the graph). Not required for new-project scaffolding.
 
 ---
 
