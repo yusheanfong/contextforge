@@ -73,6 +73,20 @@ If there are uncommitted changes that look structural (new/renamed source files)
 ```
 Do not force a sync. Continue.
 
+### 0c.1 Detect ponytail (optional, non-blocking)
+
+Best-effort check whether the **ponytail** plugin ("lazy senior dev mode") is active — it injects a
+minimal-code ladder into every worker via the `SubagentStart` hook, so no worker-prompt change is
+needed. Detection is only to decide whether the 5b.3 over-engineering gate runs and to phrase the
+final report. Never hard-require it.
+
+Most reliable signal, no filesystem probe: if ponytail is active, its `SessionStart` hook already
+injected the lazy-dev ladder into THIS session's context — so if you can see ponytail's ladder/rules
+in your own context, it's on. Store as `[PONYTAIL] = true/false`.
+
+- `[PONYTAIL]` true → print once: `ℹ️ ponytail active — workers write lean; 5b over-engineering gate on.`
+- `[PONYTAIL]` false → print nothing and proceed normally.
+
 ### 0d. Resolve the request
 
 First, parse flags out of `$ARGUMENTS`: if it contains **`--no-commit`**, set `[NO_COMMIT] = true`
@@ -287,16 +301,45 @@ Assemble the worker prompt from: the subtask **goal** + **success criterion** + 
 Use the Agent tool. **Default `subagent_type` is `general-purpose`** (the documented catch-all);
 use `Explore`/`Plan` only for read-only research subtasks.
 
-- **Independent subtasks** (no shared files, no dependency): dispatch IN PARALLEL — multiple
-  Agent calls in ONE message.
-- **Dependent subtasks**: dispatch sequentially. Pass the prior worker's COMPACTED summary
-  forward (a few lines: what changed + relevant outputs) — never its full transcript.
-
 Model selection: cheap/fast model for mechanical 1–2 file edits with a clear spec; a more
 capable model for multi-file integration or design judgment.
 
 Each worker receives ONLY its payload from Phase 3 — not this session's history. Workers edit
 code + write tests + run them, and do **NOT** commit. Committing happens in Phase 5 after gates pass.
+
+### Dispatch mode — worktrees vs. single tree
+
+Decide per batch of sibling subtasks:
+
+- **Worktree mode** — use when a batch has **2+ independent (parallel) subtasks** AND `[NO_COMMIT]`
+  is false. Each parallel subtask gets its own isolated checkout + sub-branch, so overlapping edits
+  can never collide in a shared index. This is the preferred path for real parallelism.
+- **Single-tree mode** — use for a lone subtask, a sequence of dependent subtasks, or whenever
+  `[NO_COMMIT]` is true (no branches → no worktrees). Workers edit the current checkout directly.
+
+#### Worktree mode (parallel batch)
+
+For each parallel subtask `i` in the batch, the MAIN session creates an isolated worktree on a
+sub-branch off `[BRANCH]`:
+
+```bash
+git worktree add ../<repo>-st<i> -b [BRANCH]/st<i> [BRANCH]
+```
+
+Then dispatch worker `i` with its payload (Phase 3) **plus** the absolute worktree path, instructing
+it: "Make ALL edits and run ALL commands under `<worktree abs path>` — that is your isolated
+checkout. Do not touch any other directory." Gates (Phase 5) run with that worktree as cwd. Workers
+in the same batch run fully in parallel with zero shared mutable state.
+
+After a worker passes its gates, its subtask is committed **on its sub-branch inside its worktree**
+(see Phase 5d), then merged back in Phase 5e.
+
+#### Single-tree mode
+
+- **Independent subtasks** (only one, or `[NO_COMMIT]`): dispatch in the current checkout; if more
+  than one runs in parallel here, the serialize + collision rule in Phase 5d applies.
+- **Dependent subtasks**: dispatch sequentially. Pass the prior worker's COMPACTED summary forward
+  (a few lines: what changed + relevant outputs) — never its full transcript.
 
 ---
 
@@ -340,6 +383,14 @@ record each result as `pass` / `fail` / `skipped (reason)`:
 1. **Spec compliance** — does the worker output do exactly what the subtask asked (nothing
    missing, nothing extra)?
 2. **Quality** — only after spec passes — is it well-built (tests real, no obvious smell)?
+3. **Over-engineering** *(only if `[PONYTAIL]` is true — see 0c.1)* — run a `/ponytail-review`-style
+   pass on THIS worker's diff: flag speculative abstractions, unrequested flexibility, reinvented
+   stdlib/deps, and dead scaffolding, and hand back a **delete-list**. Run it from the MAIN session
+   (subagents cannot invoke slash commands) OR dispatch a read-only reviewer subagent seeded with
+   ponytail's ladder as the review criteria (the same reviewer-subagent option below).
+   **Scope guard — never delete-list these:** the tests Phase 4 mandates, and any file needed to
+   satisfy the subtask's success criterion. Minimality never overrides the "workers must write
+   tests" rule. If ponytail is absent, skip this check and record `skipped — ponytail not installed`.
 
 Either dispatch a reviewer subagent (read-only) with the criterion + the worker's diff, or
 review directly.
@@ -347,7 +398,9 @@ review directly.
 ### 5c. Conditional routing loop (bounded)
 
 If any **gate** (5a) or **review check** (5b) FAILS, re-dispatch the SAME worker with the specific
-failures as an error log, and re-run 5a–5b.
+failures as an error log, and re-run 5a–5b. An over-engineering delete-list (5b.3) counts as a
+review failure — feed it back as the error log ("delete these, keep tests + success-criterion
+files") through this same loop; do not open a separate one.
 
 **Bounded loop: at most 3 iterations per subtask.** If still failing after 3, stop the loop and
 report it to the user — do not loop further.
@@ -366,8 +419,16 @@ Handle worker statuses:
 **If `[NO_COMMIT]` is true, skip committing entirely** — just mark the subtask complete and leave
 its changes in the working tree.
 
-Otherwise, when all gates + checks pass, the MAIN session commits. **Commits are serialized — never
-concurrent**, even when subtasks ran in parallel in Phase 4:
+**Worktree mode** (parallel batch): commit inside the subtask's worktree, on its sub-branch. Each
+worktree is its own isolated checkout, so these commits CAN run in parallel — there is no shared
+index. Stage only the worker's reported files (never `git add -A`):
+```bash
+git -C ../<repo>-st<i> add [exact files this worker reported]
+git -C ../<repo>-st<i> commit -m "[concise subtask summary]"
+```
+Record the sub-branch + commit SHA in the subtask state. Merge-back happens in 5e.
+
+**Single-tree mode**: the MAIN session commits, and **commits are serialized — never concurrent**:
 
 1. Process passing subtasks **one at a time**, in completion order. Two `git commit`s never run at
    once (the working tree + index are shared mutable state).
@@ -386,6 +447,23 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 ```
 
 Record the commit SHA(s) in the subtask state. Mark the subtask complete.
+
+### 5e. Merge worktree branches back *(worktree mode only)*
+
+Once every subtask in a parallel batch has committed on its sub-branch, the MAIN session merges
+each sub-branch back into `[BRANCH]`, **one at a time** (serialized — merges share `[BRANCH]`'s
+index):
+
+```bash
+git checkout [BRANCH]
+git merge --no-ff [BRANCH]/st<i> -m "merge [BRANCH]/st<i>: [subtask summary]"
+```
+
+- **Conflict on merge** = two subtasks really did edit the same lines. This is now a *visible, real*
+  conflict (the whole point of worktrees vs. the silent single-tree collision). Resolve it, or if it
+  signals the decomposition overlapped badly, escalate to the user.
+- After all sub-branches are merged, proceed to Phase 6 cleanup (which removes the worktrees and
+  deletes the merged sub-branches).
 
 ---
 
@@ -430,12 +508,21 @@ When all subtasks are complete:
      dep-vuln    [pass / N findings]
      secrets     pass
      SAST        [pass / skipped — semgrep not installed]
+     over-eng    [clean / N deleted / skipped — ponytail not installed]
 
    CD readiness: see doc/release-readiness.md (deploy/monitoring/rollback need your platform).
 
    On branch [BRANCH] — merge it when you're happy.
    ```
-7. Clean up: remove `graphify-out/.orchestrate_slice.py`.
+7. Clean up:
+   - Remove `graphify-out/.orchestrate_slice.py`.
+   - **Worktree mode:** remove every worktree and delete its merged sub-branch:
+     ```bash
+     git worktree remove ../<repo>-st<i>
+     git branch -d [BRANCH]/st<i>
+     ```
+     Run `git worktree prune` to clear any stale entries. If a worktree won't remove because of
+     uncommitted leftovers, report it rather than force-removing.
 
 ---
 
@@ -446,8 +533,17 @@ When all subtasks are complete:
   releases and the merge. Pass `--no-commit` to run the full pipeline with zero git writes.
 - It never rebuilds the graph and never auto-runs `/contextmap`. If `graphify-out/graph.json` is
   missing it hard-stops and asks you to run `/contextmap` manually.
+- **Parallel batches use git worktrees** — 2+ independent subtasks each get an isolated checkout on
+  a sub-branch off the feature branch, commit there in parallel, then merge back serialized. Real
+  isolation: overlapping edits surface as a visible merge conflict instead of a silent index
+  collision. Lone/dependent subtasks and `--no-commit` stay single-tree.
 - **Gates are adaptive and honest** — a repo with no lint/test/scan tooling gets `skipped — no
   tooling detected`, never a fake green check.
 - **Local CI only.** The CD half of the checklist (deploy, canary, monitoring, rollback, DAST) is
   reported in `doc/release-readiness.md`, not executed — it requires a real CI/CD platform.
 - The graph slice keeps each worker's context small regardless of repo size; that is the point.
+- **Ponytail is optional and complementary.** If the ponytail plugin is installed, its `SubagentStart`
+  hook auto-injects the lazy-dev ladder into every worker (no worker-prompt change needed), and the
+  5b.3 over-engineering gate reviews each diff for bloat before commit. Tests and success-criterion
+  files are always exempt from that gate. If ponytail is absent, everything degrades to `skipped` and
+  the pipeline is unchanged.
