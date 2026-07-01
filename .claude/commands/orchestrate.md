@@ -73,20 +73,6 @@ If there are uncommitted changes that look structural (new/renamed source files)
 ```
 Do not force a sync. Continue.
 
-### 0c.1 Detect ponytail (optional, non-blocking)
-
-Best-effort check whether the **ponytail** plugin ("lazy senior dev mode") is active — it injects a
-minimal-code ladder into every worker via the `SubagentStart` hook, so no worker-prompt change is
-needed. Detection is only to decide whether the 5b.3 over-engineering gate runs and to phrase the
-final report. Never hard-require it.
-
-Most reliable signal, no filesystem probe: if ponytail is active, its `SessionStart` hook already
-injected the lazy-dev ladder into THIS session's context — so if you can see ponytail's ladder/rules
-in your own context, it's on. Store as `[PONYTAIL] = true/false`.
-
-- `[PONYTAIL]` true → print once: `ℹ️ ponytail active — workers write lean; 5b over-engineering gate on.`
-- `[PONYTAIL]` false → print nothing and proceed normally.
-
 ### 0d. Resolve the request
 
 First, parse flags out of `$ARGUMENTS`: if it contains **`--no-commit`**, set `[NO_COMMIT] = true`
@@ -292,6 +278,24 @@ Assemble the worker prompt from: the subtask **goal** + **success criterion** + 
 - Do NOT git commit and do NOT touch unrelated code.
 - If you lack context to proceed, stop and report NEEDS_CONTEXT with what's missing.
 - Return: what you changed (files + summary) and test results.
+
+Engineering discipline (write lean) — before writing each piece of code, walk this ladder
+top-down and stop at the first rung that applies:
+  1. "Does this need to exist?" → skip it (YAGNI)
+  2. "Already in this codebase?" → reuse it, don't rewrite
+  3. "Stdlib does it?" → use it
+  4. "Native platform feature?" → use it
+  5. "Installed dependency?" → use it
+  6. "One line?" → one line
+  7. Only then: the minimum that works
+Also:
+  - State any assumption you're making; if the subtask is genuinely unclear, report NEEDS_CONTEXT
+    rather than guessing.
+  - Surgical changes only — every changed line traces to THIS subtask. Don't refactor, reformat, or
+    "improve" adjacent code; match the existing style even if you'd do it differently.
+  - The success criterion is the definition of done — verify it (run the test/check), don't assume.
+GUARD: the ladder never applies to the tests Phase 4 mandates or to any file needed to satisfy the
+success criterion. Those are always required — never skip them as "YAGNI."
 ```
 
 ---
@@ -383,14 +387,23 @@ record each result as `pass` / `fail` / `skipped (reason)`:
 1. **Spec compliance** — does the worker output do exactly what the subtask asked (nothing
    missing, nothing extra)?
 2. **Quality** — only after spec passes — is it well-built (tests real, no obvious smell)?
-3. **Over-engineering** *(only if `[PONYTAIL]` is true — see 0c.1)* — run a `/ponytail-review`-style
-   pass on THIS worker's diff: flag speculative abstractions, unrequested flexibility, reinvented
-   stdlib/deps, and dead scaffolding, and hand back a **delete-list**. Run it from the MAIN session
-   (subagents cannot invoke slash commands) OR dispatch a read-only reviewer subagent seeded with
-   ponytail's ladder as the review criteria (the same reviewer-subagent option below).
+3. **Over-engineering** *(always runs)* — an over-engineering review pass on THIS worker's diff:
+   flag speculative abstractions, unrequested flexibility, reinvented stdlib/deps, and dead
+   scaffolding, and hand back a **delete-list**. Review criteria = the minimal-code ladder (walk it
+   top-down, stop at the first rung that applies):
+   1. Does this need to exist? → shouldn't (YAGNI)
+   2. Already in this codebase? → should have reused it
+   3. Stdlib does it? → should have used it
+   4. Native platform feature? → should have used it
+   5. Installed dependency? → should have used it
+   6. One line? → should be one line
+   7. Only then: the minimum that works
+   **Run it from the MAIN session by default** (it can read the whole command, including the ladder).
+   If you instead dispatch a read-only reviewer subagent, its payload MUST restate the ladder above
+   as the review criteria — a subagent sees only its dispatch payload, not this file.
    **Scope guard — never delete-list these:** the tests Phase 4 mandates, and any file needed to
    satisfy the subtask's success criterion. Minimality never overrides the "workers must write
-   tests" rule. If ponytail is absent, skip this check and record `skipped — ponytail not installed`.
+   tests" rule.
 
 Either dispatch a reviewer subagent (read-only) with the criterion + the worker's diff, or
 review directly.
@@ -508,7 +521,7 @@ When all subtasks are complete:
      dep-vuln    [pass / N findings]
      secrets     pass
      SAST        [pass / skipped — semgrep not installed]
-     over-eng    [clean / N deleted / skipped — ponytail not installed]
+     over-eng    [clean / N deleted]
 
    CD readiness: see doc/release-readiness.md (deploy/monitoring/rollback need your platform).
 
@@ -542,8 +555,8 @@ When all subtasks are complete:
 - **Local CI only.** The CD half of the checklist (deploy, canary, monitoring, rollback, DAST) is
   reported in `doc/release-readiness.md`, not executed — it requires a real CI/CD platform.
 - The graph slice keeps each worker's context small regardless of repo size; that is the point.
-- **Ponytail is optional and complementary.** If the ponytail plugin is installed, its `SubagentStart`
-  hook auto-injects the lazy-dev ladder into every worker (no worker-prompt change needed), and the
-  5b.3 over-engineering gate reviews each diff for bloat before commit. Tests and success-criterion
-  files are always exempt from that gate. If ponytail is absent, everything degrades to `skipped` and
-  the pipeline is unchanged.
+- **Over-engineering review is a built-in gate** — no plugin needed. The minimal-code ladder is
+  injected into every worker (Phase 3c) so they write lean at generation time, and each diff is
+  reviewed for bloat before commit (5b.3), producing a delete-list routed through the same bounded
+  loop. Tests and success-criterion files are always exempt. *Ladder adapted from ponytail
+  (dietrichgebert/ponytail, MIT).*
