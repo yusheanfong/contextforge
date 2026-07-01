@@ -1,4 +1,4 @@
-# /orchestrate — CI/CD-Gated Autonomous Feature Pipeline
+# /forge-orchestrate — CI/CD-Gated Autonomous Feature Pipeline
 
 Take one feature request and run it end-to-end: parse intent → decompose → branch → dispatch
 graph-scoped worker subagents → run CI quality gates → commit per subtask → report. Asks
@@ -6,12 +6,12 @@ questions **only when the request is genuinely ambiguous**; otherwise runs hands
 
 This is a hierarchical multi-agent pipeline (Coordinator → Worker → Critic → Synthesis) where each
 worker is fed ONLY the doc files and graph nodes its subtask touches. Context isolation is derived
-from `graphify-out/graph.json` (built by `/contextmap`), not hand-curated.
+from `graphify-out/graph.json` (built by `/forge-contextmap`), not hand-curated.
 
-Companion to `/contextmap`: contextmap builds the map, `/orchestrate` uses it to execute.
+Companion to `/forge-contextmap`: contextmap builds the map, `/forge-orchestrate` uses it to execute.
 Reads `$ARGUMENTS` as the feature request.
 
-**What changed from the old behavior:** `/orchestrate` now creates a feature branch and commits per
+**What changed from the old behavior:** `/forge-orchestrate` now creates a feature branch and commits per
 subtask. This **reverses the old "never commit, history stays yours" rule** — it is intentional. It
 never tags and never merges to `main` — you own releases. If you want the old hands-off-git
 behavior, pass **`--no-commit`**: the full pipeline + gates run, but no branch and no commits are
@@ -31,15 +31,15 @@ Synthesis = final report + release-readiness.
 
 ### 0a. Graph prerequisite — hard-stop
 
-`/orchestrate` is graph-driven. Use the Read tool (or a file check) for `graphify-out/graph.json`
+`/forge-orchestrate` is graph-driven. Use the Read tool (or a file check) for `graphify-out/graph.json`
 in the current directory.
 
 If it does NOT exist, print this exact message and STOP — do nothing else (do not auto-run
-`/contextmap`; the user builds the graph manually):
+`/forge-contextmap`; the user builds the graph manually):
 
 ```
-❌ /orchestrate is graph-driven and needs graphify-out/graph.json.
-Run /contextmap first to build the knowledge graph, then re-run /orchestrate.
+❌ /forge-orchestrate is graph-driven and needs graphify-out/graph.json.
+Run /forge-contextmap first to build the knowledge graph, then re-run /forge-orchestrate.
 ```
 
 ### 0b. Resolve the Python interpreter as `[PYTHON_CMD]`
@@ -52,13 +52,13 @@ Run /contextmap first to build the knowledge graph, then re-run /orchestrate.
    ```
    Use whichever of `python` / `python3` works and is ≥ 3.10. If neither is ≥ 3.10, print:
    ```
-   ❌ /orchestrate needs Python 3.10+ to read the graph. Install it, then re-run.
+   ❌ /forge-orchestrate needs Python 3.10+ to read the graph. Install it, then re-run.
    ```
    and STOP.
 
 ### 0c. Graph freshness note (print, don't block)
 
-`/orchestrate` reads whatever `graph.json` currently exists — it never rebuilds it. The post-commit
+`/forge-orchestrate` reads whatever `graph.json` currently exists — it never rebuilds it. The post-commit
 hook refreshes the graph on every `git commit`, so committed edits are already reflected.
 
 Check for uncommitted changes (best-effort — ignore failure):
@@ -67,7 +67,7 @@ git status --porcelain 2>/dev/null
 ```
 If there are uncommitted changes that look structural (new/renamed source files), print once:
 ```
-ℹ️ Uncommitted structural changes won't be in the graph slice — run /contextmap sync or commit
+ℹ️ Uncommitted structural changes won't be in the graph slice — run /forge-contextmap sync or commit
    first for the most accurate routing. (Workers still read live code, so this only affects which
    files they're pointed at, not correctness.)
 ```
@@ -177,7 +177,7 @@ worker will see — it never inherits this session's history.
 ### 3a. Graph slice
 
 Write this script to `graphify-out/.orchestrate_slice.py` (once), then run it per subtask. It
-loads the graph exactly as graphify/contextmap do (`node_link_graph(..., edges='links')`),
+loads the graph exactly as graphify/forge-contextmap do (`node_link_graph(..., edges='links')`),
 finds nodes matching the subtask's key terms, then expands to their community plus a BFS
 neighborhood, and prints the touched source files + node labels + key edges.
 
@@ -263,7 +263,7 @@ universal docs. Read only these — never the whole `doc/` set:
 - entity/model/enum/domain sources → `doc/domain-model.md`
 - auth/token/permission/role sources → `doc/security.md`
 
-(Keep this source→doc mapping aligned with `/contextmap`'s doc set — if contextmap renames a
+(Keep this source→doc mapping aligned with `/forge-contextmap`'s doc set — if contextmap renames a
 doc, update it here too.)
 
 ### 3c. Instruction
@@ -485,12 +485,12 @@ git merge --no-ff [BRANCH]/st<i> -m "merge [BRANCH]/st<i>: [subtask summary]"
 When all subtasks are complete:
 
 1. Collect the approved outputs, strip intermediate logs, and print a clean summary (below).
-   `/orchestrate` does **not** tag — releases/tags stay a manual step you run when you want one.
+   `/forge-orchestrate` does **not** tag — releases/tags stay a manual step you run when you want one.
 2. Update `doc/progress.txt` with the current status.
 3. Append to `doc/changelog.txt` (`Date | Change | Description`, matching contextmap's format).
 4. If `[TASK]` came from `doc/task-list.md`, tick its `[ ]` → `[x]`.
 5. **Generate the CD release-readiness report** — write `doc/release-readiness.md`. Map every CD
-   checklist item `/orchestrate` cannot execute locally to a status/owner line, each marked
+   checklist item `/forge-orchestrate` cannot execute locally to a status/owner line, each marked
    **"needs your CI/CD platform — not run locally."** Group them:
    - Artifact / Docker image build, artifact repo storage
    - Deploy to dev → staging → production
@@ -503,7 +503,7 @@ When all subtasks are complete:
 6. Print the final report (under `[NO_COMMIT]`, replace the Branch/Commits block with
    `Mode: --no-commit — changes left in working tree for you to review and commit`):
    ```
-   ✅ /orchestrate complete — [TASK]
+   ✅ /forge-orchestrate complete — [TASK]
 
    Branch:  [BRANCH]
    Commits: [N]
@@ -544,8 +544,8 @@ When all subtasks are complete:
 - **This command commits** (feature branch + per-subtask commits) — a deliberate reversal of the old
   "never commit, history stays yours" rule. It never tags and never merges to `main` — you own
   releases and the merge. Pass `--no-commit` to run the full pipeline with zero git writes.
-- It never rebuilds the graph and never auto-runs `/contextmap`. If `graphify-out/graph.json` is
-  missing it hard-stops and asks you to run `/contextmap` manually.
+- It never rebuilds the graph and never auto-runs `/forge-contextmap`. If `graphify-out/graph.json` is
+  missing it hard-stops and asks you to run `/forge-contextmap` manually.
 - **Parallel batches use git worktrees** — 2+ independent subtasks each get an isolated checkout on
   a sub-branch off the feature branch, commit there in parallel, then merge back serialized. Real
   isolation: overlapping edits surface as a visible merge conflict instead of a silent index

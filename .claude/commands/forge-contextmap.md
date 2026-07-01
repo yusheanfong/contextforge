@@ -1,4 +1,4 @@
-# /contextmap — Graph-Powered Context Scaffold
+# /forge-contextmap — Graph-Powered Context Scaffold
 
 Combines Graphify (code → knowledge graph) with ContextForge-style AI workflow docs.
 Reads $ARGUMENTS to detect subcommand: `sync` or `--new`. Otherwise auto-detects mode.
@@ -74,9 +74,9 @@ All project docs live in /doc:
 - doc/progress.txt        — Current status
 
 ## Graph Sync
-Sections marked <!-- graphify:auto start:... --> are auto-populated by /contextmap sync.
+Sections marked <!-- graphify:auto start:... --> are auto-populated by /forge-contextmap sync.
 Edit ONLY outside these markers — content inside is overwritten on sync.
-When Graphify runs for the first time (after code exists), run /contextmap sync to populate.
+When Graphify runs for the first time (after code exists), run /forge-contextmap sync to populate.
 
 ## Rules
 1. Before writing code, ALWAYS read doc/architecture.md, doc/solution-structure.md, and doc/coding-standard.md (cheap, universal constraints). Then review doc/task-list.md and graphify-out/GRAPH_REPORT.md to decide which domain docs (api-contract.md, domain-model.md, security.md, ui-guideline.md) the current task touches, and read only those before modifying code.
@@ -132,7 +132,7 @@ For multi-step tasks, state a brief plan with a verify step per step:
 [TECH_STACK]
 
 <!-- graphify:auto start:project:architecture -->
-_No graph data yet. Run /contextmap sync after adding source code to auto-populate this section._
+_No graph data yet. Run /forge-contextmap sync after adding source code to auto-populate this section._
 <!-- graphify:auto end:project:architecture -->
 
 ## Architecture Style
@@ -154,7 +154,7 @@ _No graph data yet. Run /contextmap sync after adding source code to auto-popula
 # Domain Model
 
 <!-- graphify:auto start:project:domain-model -->
-_No graph data yet. Run /contextmap sync after adding source code to auto-populate this section._
+_No graph data yet. Run /forge-contextmap sync after adding source code to auto-populate this section._
 <!-- graphify:auto end:project:domain-model -->
 
 ## Enums
@@ -173,7 +173,7 @@ _No graph data yet. Run /contextmap sync after adding source code to auto-popula
 # API Contract
 
 <!-- graphify:auto start:project:api-contract -->
-_No graph data yet. Run /contextmap sync after adding source code to auto-populate this section._
+_No graph data yet. Run /forge-contextmap sync after adding source code to auto-populate this section._
 <!-- graphify:auto end:project:api-contract -->
 
 ## Endpoints
@@ -192,7 +192,7 @@ _No graph data yet. Run /contextmap sync after adding source code to auto-popula
 [TECH_STACK]
 
 <!-- graphify:auto start:project:solution-structure -->
-_No graph data yet. Run /contextmap sync after adding source code to auto-populate this section._
+_No graph data yet. Run /forge-contextmap sync after adding source code to auto-populate this section._
 <!-- graphify:auto end:project:solution-structure -->
 
 ## Root Layout
@@ -213,7 +213,7 @@ Follow this structure exactly. Do not invent new layers or folders.
 ## Language: [TECH_STACK]
 
 <!-- graphify:auto start:project:coding-standard -->
-_No graph data yet. Run /contextmap sync after adding source code to auto-populate this section._
+_No graph data yet. Run /forge-contextmap sync after adding source code to auto-populate this section._
 <!-- graphify:auto end:project:coding-standard -->
 
 ## Rules
@@ -229,7 +229,7 @@ _No graph data yet. Run /contextmap sync after adding source code to auto-popula
 # Security Model
 
 <!-- graphify:auto start:project:security -->
-_No graph data yet. Run /contextmap sync after adding source code to auto-populate this section._
+_No graph data yet. Run /forge-contextmap sync after adding source code to auto-populate this section._
 <!-- graphify:auto end:project:security -->
 
 ## Roles
@@ -247,7 +247,7 @@ _No graph data yet. Run /contextmap sync after adding source code to auto-popula
 # UI Guidelines
 
 <!-- graphify:auto start:project:ui-guideline -->
-_No graph data yet. Run /contextmap sync after adding source code to auto-populate this section._
+_No graph data yet. Run /forge-contextmap sync after adding source code to auto-populate this section._
 <!-- graphify:auto end:project:ui-guideline -->
 
 ## Layout
@@ -267,7 +267,7 @@ _No graph data yet. Run /contextmap sync after adding source code to auto-popula
 # Changelog
 # Format: Date | Change | Description
 
-[TODAY'S DATE] | Project initialized | /contextmap new project setup
+[TODAY'S DATE] | Project initialized | /forge-contextmap new project setup
 ```
 
 Replace `[TODAY'S DATE]` with today's actual date (YYYY-MM-DD).
@@ -339,7 +339,7 @@ Update this file as requirements evolve. Only implement the NEXT incomplete task
 Wait for user feedback on the task list. Apply any changes they request. Once approved, confirm:
 
 ```
-✅ /contextmap setup complete!
+✅ /forge-contextmap setup complete!
 
 Files created:
   CLAUDE.md
@@ -358,7 +358,7 @@ Files created:
 Next steps:
 1. Fill in [FILL IN: ...] placeholders in /doc files
 2. Start coding — Claude will follow these docs automatically
-3. Once you have source code, run /contextmap sync to populate graph sections
+3. Once you have source code, run /forge-contextmap sync to populate graph sections
 ```
 
 ### Step N4: Install Post-Commit Hook
@@ -418,7 +418,7 @@ Parse the version output. If Python is not found OR version is below 3.10:
   - Install Python 3.10+: https://www.python.org/downloads/
   - On Windows, ensure 'python' or 'python3' is on your PATH
   
-  After fixing, run /contextmap again.
+  After fixing, run /forge-contextmap again.
   ```
 
 Determine which command works (`python` or `python3`) and use it for all subsequent commands. Store as `[PYTHON_CMD]`.
@@ -554,7 +554,7 @@ All project docs live in /doc:
 - doc/progress.txt        — Current status
 
 ## Graph Sync Warning
-Sections marked <!-- graphify:auto --> are overwritten on /contextmap sync.
+Sections marked <!-- graphify:auto --> are overwritten on /forge-contextmap sync.
 Edit ONLY outside these markers.
 
 ## Rules
@@ -776,7 +776,7 @@ Same as Step N4 in New Project Mode.
 Print:
 
 ```
-✅ /contextmap setup complete!
+✅ /forge-contextmap setup complete!
 
 Graph analyzed: graphify-out/graph.json
 Docs populated with graph data (sections marked <!-- graphify:auto -->)
@@ -794,7 +794,7 @@ Files created/updated:
   doc/changelog.txt
   doc/progress.txt
 
-Graph sections will auto-update whenever you run /contextmap sync.
+Graph sections will auto-update whenever you run /forge-contextmap sync.
 User-owned content (outside <!-- graphify:auto --> markers) is never touched.
 
 Next: Fill in [FILL IN] placeholders in /doc files, then start coding.
@@ -872,7 +872,7 @@ If a fence key references a `source_file` path that no longer exists in `graph.j
 Print a summary of what changed:
 
 ```
-✅ /contextmap sync complete!
+✅ /forge-contextmap sync complete!
 
 Graph rebuilt: [N] nodes, [M] edges
 Docs refreshed:
@@ -895,7 +895,7 @@ User content: untouched (all content outside <!-- graphify:auto --> preserved)
 
 ```
 <!-- graphify:auto start:QUALIFIED_KEY:SECTION -->
-Content here is managed by /contextmap sync.
+Content here is managed by /forge-contextmap sync.
 DO NOT manually edit — changes will be overwritten.
 <!-- graphify:auto end:QUALIFIED_KEY:SECTION -->
 ```

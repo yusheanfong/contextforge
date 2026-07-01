@@ -1,12 +1,12 @@
-# /audit — Repo-Wide Over-Engineering Audit
+# /forge-audit — Repo-Wide Over-Engineering Audit
 
 Sweep the ENTIRE codebase (or a scoped path) for already-accumulated bloat and hand back a grouped
 delete/simplify list with a rationale per finding. **Reports only — never edits, never commits.** An
 on-demand cleanup tool.
 
-Companion to `/contextmap` (which builds `graphify-out/graph.json`) — `/audit` *uses* that map to
-point at candidates instead of blind-reading every file. Contrast with `/orchestrate`: its 5b.3 gate
-reviews a single worker's fresh diff at commit time; `/audit` sweeps code that already landed.
+Companion to `/forge-contextmap` (which builds `graphify-out/graph.json`) — `/forge-audit` *uses* that map to
+point at candidates instead of blind-reading every file. Contrast with `/forge-orchestrate`: its 5b.3 gate
+reviews a single worker's fresh diff at commit time; `/forge-audit` sweeps code that already landed.
 
 Review criteria = the **minimal-code ladder** (walk top-down, stop at the first rung that applies).
 *Ladder adapted from ponytail (dietrichgebert/ponytail, MIT).*
@@ -25,15 +25,15 @@ Review criteria = the **minimal-code ladder** (walk top-down, stop at the first 
 
 ### 0b. Graph prerequisite — hard-stop
 
-`/audit` is graph-driven. Use the Read tool (or a file check) for `graphify-out/graph.json` in the
+`/forge-audit` is graph-driven. Use the Read tool (or a file check) for `graphify-out/graph.json` in the
 current directory.
 
 If it does NOT exist, print this exact message and STOP — do nothing else (do not auto-run
-`/contextmap`; the user builds the graph manually):
+`/forge-contextmap`; the user builds the graph manually):
 
 ```
-❌ /audit is graph-driven and needs graphify-out/graph.json.
-Run /contextmap first to build the knowledge graph, then re-run /audit.
+❌ /forge-audit is graph-driven and needs graphify-out/graph.json.
+Run /forge-contextmap first to build the knowledge graph, then re-run /forge-audit.
 ```
 
 ### 0c. Resolve the Python interpreter as `[PYTHON_CMD]`
@@ -46,7 +46,7 @@ Run /contextmap first to build the knowledge graph, then re-run /audit.
    ```
    Use whichever of `python` / `python3` works and is ≥ 3.10. If neither is ≥ 3.10, print:
    ```
-   ❌ /audit needs Python 3.10+ to read the graph. Install it, then re-run.
+   ❌ /forge-audit needs Python 3.10+ to read the graph. Install it, then re-run.
    ```
    and STOP.
 
@@ -56,7 +56,7 @@ Run /contextmap first to build the knowledge graph, then re-run /audit.
 
 Run the scan **inline via the Bash tool** — no file is written anywhere (single-pass + read-only, so
 nothing is persisted to disk). Pass `[SCOPE]` as the one argument; empty string means whole repo.
-The script loads the graph exactly as graphify/contextmap do (`node_link_graph(..., edges='links')`)
+The script loads the graph exactly as graphify/forge-contextmap do (`node_link_graph(..., edges='links')`)
 and emits three candidate buckets.
 
 ```bash
@@ -230,19 +230,19 @@ result, not a prompt to manufacture findings.
 
 ## NOTES
 
-- **Report-only, single-pass.** No subagents, no branches, no gate loop — unlike `/orchestrate`.
-  `/audit` reads the graph, confirms against source, and prints. That is the whole command.
+- **Report-only, single-pass.** No subagents, no branches, no gate loop — unlike `/forge-orchestrate`.
+  `/forge-audit` reads the graph, confirms against source, and prints. That is the whole command.
 - **What the graph can and can't surface.** Candidates come from three graph signals: orphan → rung
   1, duplicate label → rung 2, god node → structural. Rungs 3–6 (reinvented stdlib, native feature,
   existing dependency, one-liner) have **no discovery mechanism of their own** — they're caught
   opportunistically *while confirming* a graph-surfaced candidate, not by a repo-wide line sweep.
   The ladder is the *evaluation* applied to candidates, not a sweep for every rung. This is
-  deliberate (the point is to NOT blind-read every file) — state it, don't oversell `/audit` as
+  deliberate (the point is to NOT blind-read every file) — state it, don't oversell `/forge-audit` as
   "reads every line."
 - **Duplication is heuristic.** Same-label-different-file is a *pointer*; two things sharing a name
   may be genuinely distinct. Always confirmed in Phase 2 (unless `--graph-only`), never flagged from
   the graph alone.
 - **God nodes are the softest signal.** High degree often means legitimately central, not bloated.
   Reported as a question, outside the ladder taxonomy.
-- It never rebuilds the graph and never auto-runs `/contextmap`. If `graph.json` is missing it
-  hard-stops and asks you to run `/contextmap` manually.
+- It never rebuilds the graph and never auto-runs `/forge-contextmap`. If `graph.json` is missing it
+  hard-stops and asks you to run `/forge-contextmap` manually.

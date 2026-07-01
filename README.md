@@ -3,12 +3,12 @@
 A three-command suite for Claude Code that shares one live knowledge graph: scaffold the workflow, execute features against it, and sweep it for bloat — all reading the same map of your codebase.
 
 ```
-/contextmap   → scaffold docs + build the graph   (start here)
-/orchestrate  → execute a feature against the graph
-/audit        → sweep the repo for over-engineering
+/forge-contextmap   → scaffold docs + build the graph   (start here)
+/forge-orchestrate  → execute a feature against the graph
+/forge-audit        → sweep the repo for over-engineering
 ```
 
-`/contextmap` is the entry point — the other two hard-stop until it has built the graph.
+`/forge-contextmap` is the entry point — the other two hard-stop until it has built the graph.
 
 ---
 
@@ -16,7 +16,7 @@ A three-command suite for Claude Code that shares one live knowledge graph: scaf
 
 Claude Code starts every session cold. It reads `CLAUDE.md` (auto-loaded, ~600 tokens) to know what it's building. Generic placeholders mean generic decisions.
 
-`/contextmap` solves both the scaffolding problem and the accuracy problem:
+`/forge-contextmap` solves both the scaffolding problem and the accuracy problem:
 
 - **New project** — asks your goal, enhances it, scaffolds all docs, generates a phased task plan
 - **Existing project** — analyzes your codebase, extracts real architecture knowledge, fills docs with actual data, waits for your validation
@@ -30,19 +30,19 @@ Claude Code starts every session cold. It reads `CLAUDE.md` (auto-loaded, ~600 t
 
 ```bash
 mkdir -p ~/.claude/commands
-curl -o ~/.claude/commands/contextmap.md \
-  https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/contextmap.md
+curl -o ~/.claude/commands/forge-contextmap.md \
+  https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/forge-contextmap.md
 ```
 
 **Project-level** (this project only):
 
 ```bash
 mkdir -p .claude/commands
-curl -o .claude/commands/contextmap.md \
-  https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/contextmap.md
+curl -o .claude/commands/forge-contextmap.md \
+  https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/forge-contextmap.md
 ```
 
-**For existing project analysis**, you also need Python 3.10+. `/contextmap` installs Graphify automatically when it needs it.
+**For existing project analysis**, you also need Python 3.10+. `/forge-contextmap` installs Graphify automatically when it needs it.
 
 ---
 
@@ -51,27 +51,27 @@ curl -o .claude/commands/contextmap.md \
 The three commands share one graph and run in a loop:
 
 ```
-Setup (once)         /contextmap                → scaffold docs + build graph + post-commit hook
-Per feature          /orchestrate <feature>     → branch + graph-scoped agents + CI gates + commits
+Setup (once)         /forge-contextmap                → scaffold docs + build graph + post-commit hook
+Per feature          /forge-orchestrate <feature>     → branch + graph-scoped agents + CI gates + commits
                      → review the diff → merge the branch
-                     /contextmap sync           → refresh the <!-- graphify:auto --> doc fences
-Periodic / on-demand /audit                     → whole-repo bloat sweep (read-only)
+                     /forge-contextmap sync           → refresh the <!-- graphify:auto --> doc fences
+Periodic / on-demand /forge-audit                     → whole-repo bloat sweep (read-only)
 ```
 
-**Sync comes *after* `/orchestrate`, not before.** `/orchestrate` updates `progress.txt`,
+**Sync comes *after* `/forge-orchestrate`, not before.** `/forge-orchestrate` updates `progress.txt`,
 `changelog.txt`, and `task-list.md` — but it does **not** refresh the `graphify:auto` doc fences.
 The post-commit hook rebuilds `graph.json` on every commit yet never writes docs. So run
-`/contextmap sync` after merging to pull the fresh graph into your docs.
+`/forge-contextmap sync` after merging to pull the fresh graph into your docs.
 
 | Command | Use it when | Writes | Git |
 |---------|-------------|--------|-----|
-| `/contextmap` | Starting out, or refreshing docs after code changes (`sync`) | `doc/*`, `graph.json`, post-commit hook | never commits |
-| `/orchestrate <feature>` | Building a new feature end-to-end | code + tests, `release-readiness.md`, progress/changelog | commits per subtask on a branch (opt out with `--no-commit`) |
-| `/audit [path]` | Cleaning up accumulated bloat, before a refactor or release | nothing (report-only) | never commits |
+| `/forge-contextmap` | Starting out, or refreshing docs after code changes (`sync`) | `doc/*`, `graph.json`, post-commit hook | never commits |
+| `/forge-orchestrate <feature>` | Building a new feature end-to-end | code + tests, `release-readiness.md`, progress/changelog | commits per subtask on a branch (opt out with `--no-commit`) |
+| `/forge-audit [path]` | Cleaning up accumulated bloat, before a refactor or release | nothing (report-only) | never commits |
 
-**`/audit` vs `/orchestrate`'s built-in review:** `/orchestrate` reviews a *single fresh diff* at
-commit time (its over-engineering gate). `/audit` sweeps *already-landed* code across the whole repo.
-Reach for `/audit` on-demand when cruft has piled up.
+**`/forge-audit` vs `/forge-orchestrate`'s built-in review:** `/forge-orchestrate` reviews a *single fresh diff* at
+commit time (its over-engineering gate). `/forge-audit` sweeps *already-landed* code across the whole repo.
+Reach for `/forge-audit` on-demand when cruft has piled up.
 
 ---
 
@@ -82,13 +82,13 @@ Reach for `/audit` on-demand when cruft has piled up.
 In an empty or near-empty directory:
 
 ```
-/contextmap
+/forge-contextmap
 ```
 
 Or force new project mode:
 
 ```
-/contextmap --new
+/forge-contextmap --new
 ```
 
 Flow:
@@ -106,7 +106,7 @@ No Python required for new projects. Graphify activates on first sync once you h
 In a project with source code (auto-detected):
 
 ```
-/contextmap
+/forge-contextmap
 ```
 
 Flow:
@@ -129,7 +129,7 @@ Flow:
 After code changes:
 
 ```
-/contextmap sync
+/forge-contextmap sync
 ```
 
 Flow:
@@ -142,19 +142,19 @@ Flow:
 
 ---
 
-## /orchestrate — Execute With the Map
+## /forge-orchestrate — Execute With the Map
 
-`/contextmap` builds the map. `/orchestrate` uses it to *execute* a whole feature — a hierarchical
+`/forge-contextmap` builds the map. `/forge-orchestrate` uses it to *execute* a whole feature — a hierarchical
 multi-agent pipeline (Coordinator → Worker → Critic → Synthesis) where each worker subagent sees
 **only the docs and graph nodes its piece of the work touches** — context isolation derived from
 `graphify-out/graph.json`, not hand-curated.
 
 ```
-/orchestrate add input validation to the checkout endpoint
+/forge-orchestrate add input validation to the checkout endpoint
 ```
 
 Flow:
-1. **Hard stop** if no `graphify-out/graph.json` — run `/contextmap` first
+1. **Hard stop** if no `graphify-out/graph.json` — run `/forge-contextmap` first
 2. **Clarify only if ambiguous** — asks about scope/criteria only for a genuinely unclear request; otherwise states its assumptions and runs hands-off
 3. **Branch** — creates `feature/<slug>` and works there
 4. **Decompose** the task into subtasks (goal, success criterion, dependencies, gate set)
@@ -168,36 +168,36 @@ Flow:
 **This command commits** — a feature branch with per-subtask commits. It never tags and never merges
 to `main`; **you own the release and the merge.** Pass **`--no-commit`** to run the full pipeline and
 all gates with zero git writes — changes are left in the working tree for you to review and commit
-yourself. `/orchestrate` never rebuilds the graph (that's `/contextmap sync` or the post-commit
+yourself. `/forge-orchestrate` never rebuilds the graph (that's `/forge-contextmap sync` or the post-commit
 hook), so commit or sync first if you have uncommitted structural changes.
 
 **Install** (alongside contextmap):
 
 ```bash
-curl -o ~/.claude/commands/orchestrate.md \
-  https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/orchestrate.md
+curl -o ~/.claude/commands/forge-orchestrate.md \
+  https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/forge-orchestrate.md
 ```
 
-Requires Python 3.10+ (to read the graph) and a project that has already run `/contextmap`.
+Requires Python 3.10+ (to read the graph) and a project that has already run `/forge-contextmap`.
 
 ---
 
-## /audit — Sweep for Over-Engineering
+## /forge-audit — Sweep for Over-Engineering
 
-`/orchestrate` reviews the diff it just wrote. `/audit` sweeps code that **already landed** —
+`/forge-orchestrate` reviews the diff it just wrote. `/forge-audit` sweeps code that **already landed** —
 the entire repo (or a scoped path) for accumulated bloat. **Report-only: never edits, never commits.**
 
 ```
-/audit                    # whole repo
-/audit src/checkout       # scope to a path prefix
+/forge-audit                    # whole repo
+/forge-audit src/checkout       # scope to a path prefix
 ```
 
-Like `/orchestrate`, it uses `graphify-out/graph.json` to point at candidates instead of blind-reading
+Like `/forge-orchestrate`, it uses `graphify-out/graph.json` to point at candidates instead of blind-reading
 every file — then confirms each against the real source before flagging it (*the graph points, the
 code decides*).
 
 Flow:
-1. **Hard stop** if no `graphify-out/graph.json` — run `/contextmap` first
+1. **Hard stop** if no `graphify-out/graph.json` — run `/forge-contextmap` first
 2. **Graph scan** — surfaces three candidate buckets: orphans / near-dead nodes, duplicate labels across files, and god nodes (over-centralization)
 3. **Source confirmation** — opens each candidate's file and evaluates it against the minimal-code ladder (dead? duplicate? stdlib does it? one-liner?), dropping anything the code proves legitimate
 4. **Report** — a grouped delete/simplify list with a rung + rationale per finding, plus god-node structural notes framed as *decompose?* questions, and a summary count
@@ -208,11 +208,11 @@ tagged `[unconfirmed]`. Tests and files needed for current behavior are never de
 **Install** (alongside contextmap):
 
 ```bash
-curl -o ~/.claude/commands/audit.md \
-  https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/audit.md
+curl -o ~/.claude/commands/forge-audit.md \
+  https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/forge-audit.md
 ```
 
-Requires Python 3.10+ (to read the graph) and a project that has already run `/contextmap`.
+Requires Python 3.10+ (to read the graph) and a project that has already run `/forge-contextmap`.
 
 ---
 
@@ -237,7 +237,7 @@ your-project/
     ├── task-list.md             ← Master task list (100% yours — never graph-populated)
     ├── changelog.txt            ← Updated after every change
     ├── progress.txt             ← Current status (kept short)
-    ├── release-readiness.md     ← Written by /orchestrate — CD steps to run on your platform
+    ├── release-readiness.md     ← Written by /forge-orchestrate — CD steps to run on your platform
     └── Progress/
         └── Progress-N.txt       ← Per-task detailed logs
 ```
@@ -258,7 +258,7 @@ your-project/
 | **Community** | A cluster of related nodes (Leiden algorithm) |
 | **God node** | A highest-degree concept — something everything else depends on |
 
-`/contextmap` reads `graphify-out/graph.json` and maps this data into your doc files.
+`/forge-contextmap` reads `graphify-out/graph.json` and maps this data into your doc files.
 
 ### The Fence Protocol
 
@@ -267,21 +267,21 @@ Graph-managed content is wrapped in HTML comment fences:
 ```markdown
 <!-- graphify:auto start:src/auth/auth_service:architecture -->
 Content here is extracted from your code.
-Overwritten on every /contextmap sync.
+Overwritten on every /forge-contextmap sync.
 <!-- graphify:auto end:src/auth/auth_service:architecture -->
 ```
 
 **Everything outside the fences is yours.** Claude never touches it during sync.
 
 - Add notes, rules, and context anywhere outside the fences — they survive every sync
-- Graph sections refresh automatically when you run `/contextmap sync`
+- Graph sections refresh automatically when you run `/forge-contextmap sync`
 - Fence keys are fully-qualified paths (`source_file:section`) — no collision between modules with the same short name
 
 ### The Post-Commit Hook
 
 `.git/hooks/post-commit` runs `python -m graphify . --update` silently in the background after every commit. This keeps `graphify-out/graph.json` current without blocking your workflow.
 
-The hook only rebuilds the graph — it never writes to doc files. Run `/contextmap sync` explicitly when you want docs refreshed.
+The hook only rebuilds the graph — it never writes to doc files. Run `/forge-contextmap sync` explicitly when you want docs refreshed.
 
 ### Session Flow
 
@@ -289,7 +289,7 @@ The hook only rebuilds the graph — it never writes to doc files. Run `/context
 You write code → git commit
   └─→ post-commit hook: graphify --update (background, silent)
 
-/contextmap sync
+/forge-contextmap sync
   └─→ reads updated graph.json
   └─→ refreshes <!-- graphify:auto --> sections
   └─→ drafts changelog entries from added/removed nodes (you review)
@@ -309,7 +309,7 @@ Claude Code session start
 
 Standard templates fill `architecture.md` with `[FILL IN: your tech stack]`. You do the work, Claude uses what you wrote — which may be incomplete or stale after a week of coding.
 
-`/contextmap` extracts architecture from your actual code. It finds your central abstractions, maps module dependencies, and detects coding patterns. Docs reflect reality.
+`/forge-contextmap` extracts architecture from your actual code. It finds your central abstractions, maps module dependencies, and detects coding patterns. Docs reflect reality.
 
 ### Structured context = better decisions
 
@@ -330,7 +330,7 @@ Not all code is equally important. God nodes are the concepts with the most conn
 
 ## Keeping Claude on Track
 
-`/contextmap` writes these rules into `CLAUDE.md`:
+`/forge-contextmap` writes these rules into `CLAUDE.md`:
 
 1. Before writing code, always read the universal docs (`architecture.md`, `solution-structure.md`, `coding-standard.md`), then read only the domain docs the task touches (decided from `task-list.md` + `GRAPH_REPORT.md`) — not every `/doc` file
 2. Implement ONLY the next incomplete task from `task-list.md`
@@ -349,7 +349,7 @@ Session N+1: fresh session → same auto-load → continue from progress.txt
 ## Requirements
 
 - Claude Code (any version)
-- Python 3.10+ — needed for existing-project analysis, `/contextmap sync`, and both `/orchestrate` and `/audit` (they read the graph). Not required for new-project scaffolding.
+- Python 3.10+ — needed for existing-project analysis, `/forge-contextmap sync`, and both `/forge-orchestrate` and `/forge-audit` (they read the graph). Not required for new-project scaffolding.
 
 ---
 
