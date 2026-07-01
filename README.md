@@ -103,8 +103,44 @@ Flow:
 1. Rebuilds the knowledge graph incrementally
 2. Refreshes only the `<!-- graphify:auto -->` fenced sections in doc files
 3. Preserves everything outside the fences — always
-4. Prints a summary of what changed
-5. Tombstones deleted modules: `<!-- graphify:removed: ModuleName (last seen: YYYY-MM-DD) -->`
+4. Auto-drafts structural `changelog.txt` entries from added/removed graph nodes (marked as editable drafts — keep, edit, or delete)
+5. Prints a summary of what changed
+6. Tombstones deleted modules: `<!-- graphify:removed: ModuleName (last seen: YYYY-MM-DD) -->`
+
+---
+
+## /orchestrate — Execute With the Map
+
+`/contextmap` builds the map. `/orchestrate` uses it to *execute*.
+
+```
+/orchestrate add input validation to the checkout endpoint
+```
+
+It's a companion command that turns a task into a multi-agent run where each worker subagent sees
+**only the docs and graph nodes its piece of the work touches** — context isolation derived from
+`graphify-out/graph.json`, not hand-curated.
+
+Flow:
+1. **Hard stop** if no `graphify-out/graph.json` — run `/contextmap` first
+2. **Decompose** the task into subtasks (goal, success criterion, dependencies) — shown for your approval
+3. **Graph slice per subtask** — reads `graph.json`, finds the touched nodes' community + neighborhood, and pulls only the matching `doc/*` files (plus the three universal docs)
+4. **Dispatch workers** — parallel for independent subtasks, sequential for dependent ones; each worker gets only its slice
+5. **Bounded review loop** — spec then quality, max 3 iterations per subtask
+6. **Synthesize** — clean summary, updates `progress.txt` / `changelog.txt`, ticks the task
+
+Workers **implement (edit code + write tests) but never commit** — you review the diff and commit.
+`/orchestrate` never rebuilds the graph (that's `/contextmap sync` or the post-commit hook), so
+commit or sync first if you have uncommitted structural changes.
+
+**Install** (alongside contextmap):
+
+```bash
+curl -o ~/.claude/commands/orchestrate.md \
+  https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/orchestrate.md
+```
+
+Requires Python 3.10+ (to read the graph) and a project that has already run `/contextmap`.
 
 ---
 
@@ -116,6 +152,7 @@ your-project/
 ├── .git/hooks/post-commit       ← Silently rebuilds graph on every commit
 ├── graphify-out/
 │   ├── graph.json               ← Knowledge graph (Graphify-managed, don't edit)
+│   ├── graph.prev.json          ← Last-sync snapshot (powers the auto-changelog diff)
 │   └── GRAPH_REPORT.md          ← Human-readable graph summary
 └── doc/
     ├── architecture.md          ← Tech stack, detected patterns, design rules
@@ -182,6 +219,7 @@ You write code → git commit
 /contextmap sync
   └─→ reads updated graph.json
   └─→ refreshes <!-- graphify:auto --> sections
+  └─→ drafts changelog entries from added/removed nodes (you review)
   └─→ your content outside fences: unchanged
 
 Claude Code session start
@@ -221,7 +259,7 @@ Not all code is equally important. God nodes are the concepts with the most conn
 
 `/contextmap` writes these rules into `CLAUDE.md`:
 
-1. Read all `/doc` files before writing any code
+1. Before writing code, always read the universal docs (`architecture.md`, `solution-structure.md`, `coding-standard.md`), then read only the domain docs the task touches (decided from `task-list.md` + `GRAPH_REPORT.md`) — not every `/doc` file
 2. Implement ONLY the next incomplete task from `task-list.md`
 3. Update `progress.txt` after every completed task
 4. Update `changelog.txt` after every change (`Date | Change | Description`)

@@ -79,7 +79,7 @@ Edit ONLY outside these markers — content inside is overwritten on sync.
 When Graphify runs for the first time (after code exists), run /contextmap sync to populate.
 
 ## Rules
-1. Read all /doc files before writing any code.
+1. Before writing code, ALWAYS read doc/architecture.md, doc/solution-structure.md, and doc/coding-standard.md (cheap, universal constraints). Then review doc/task-list.md and graphify-out/GRAPH_REPORT.md to decide which domain docs (api-contract.md, domain-model.md, security.md, ui-guideline.md) the current task touches, and read only those before modifying code.
 2. Implement ONLY the next incomplete task from doc/task-list.md.
 3. Update doc/progress.txt after every completed task.
 4. Update doc/changelog.txt after every change (format: Date | Change | Description).
@@ -382,7 +382,7 @@ else
     exit 0
 fi
 if $PYTHON -m graphify --version >/dev/null 2>&1; then
-    $PYTHON -m graphify . --update 2>/dev/null &
+    ( $PYTHON -m graphify . --update >/dev/null 2>&1 & )
 fi
 ```
 
@@ -430,12 +430,18 @@ Check if Graphify is installed:
 [PYTHON_CMD] -m graphify --version 2>&1
 ```
 
-If not found, install it:
-```bash
-[PYTHON_CMD] -m pip install graphifyy
-```
+If not found, install it. Choose the target by environment so we never break a managed env nor pollute the global one — `--user` is invalid inside a virtualenv, so only use it when no env is active:
 
-Note: the PyPI package name is `graphifyy` (double y). After pip install, run the post-install setup:
+- **If a virtualenv/conda/poetry env is active** — detect via `$VIRTUAL_ENV` being set, or `[PYTHON_CMD] -c "import sys; print(sys.prefix != sys.base_prefix)"` printing `True` — install into it normally:
+  ```bash
+  [PYTHON_CMD] -m pip install graphifyy
+  ```
+- **Otherwise** (no managed env active), use `--user` to avoid touching global/system site-packages and to avoid needing sudo:
+  ```bash
+  [PYTHON_CMD] -m pip install --user graphifyy
+  ```
+
+Either way, `python -m graphify` resolves afterward. Note: the PyPI package name is `graphifyy` (double y) — this is correct and verified, NOT a typo. Do not change it to `graphify`. After pip install, run the post-install setup:
 ```bash
 graphify install
 ```
@@ -552,7 +558,7 @@ Sections marked <!-- graphify:auto --> are overwritten on /contextmap sync.
 Edit ONLY outside these markers.
 
 ## Rules
-1. Read all /doc files before writing any code.
+1. Before writing code, ALWAYS read doc/architecture.md, doc/solution-structure.md, and doc/coding-standard.md (cheap, universal constraints). Then review doc/task-list.md and graphify-out/GRAPH_REPORT.md to decide which domain docs (api-contract.md, domain-model.md, security.md, ui-guideline.md) the current task touches, and read only those before modifying code.
 2. Implement ONLY the next incomplete task from doc/task-list.md.
 3. Update doc/progress.txt after every completed task.
 4. Update doc/changelog.txt after every change (format: Date | Change | Description).
@@ -822,6 +828,25 @@ Wait for completion.
 
 Re-read `graphify-out/graph.json`. Extract the same fields as Step E4.
 
+### Step S3.5: Diff Graph and Draft Changelog
+
+Auto-draft structural changelog entries from what actually changed, so the log captures real mutations instead of vague summaries. Use the Read tool on `graphify-out/graph.prev.json` (the baseline saved at the end of the last sync):
+
+1. **If `graphify-out/graph.prev.json` does not exist** (first sync): skip the diff — you'll create the baseline in step 4 below. Note "changelog baseline created — no diff yet."
+2. **If it exists**: build a node-identity key for each node as `label + "@" + source_file`, then compute:
+   - `added` = nodes in current `graph.json` but not in `graph.prev.json`
+   - `removed` = nodes in `graph.prev.json` but not in current `graph.json`
+   - For file-level context, also run (best-effort — ignore failure): `git diff --name-only HEAD~1 HEAD 2>/dev/null`
+3. **Append a draft block** to `doc/changelog.txt`. This file is user-owned, so mark the block clearly as an editable draft. Use the existing `Date | Change | Description` line style:
+   ```
+   [TODAY'S DATE] | Auto-draft (review/edit) | [Added] <label> (<source_file>) ; [Removed] <label> (<source_file>)
+   ```
+   List the most significant added/removed nodes (cap ~10 each to stay readable). If nothing structural changed, write one line noting "no structural changes detected."
+4. **Update the baseline** for next time — use the Bash tool:
+   ```bash
+   cp graphify-out/graph.json graphify-out/graph.prev.json
+   ```
+
 ### Step S4: Fence-Aware Merge
 
 For each doc file that has `<!-- graphify:auto start:... -->` markers:
@@ -857,6 +882,9 @@ Docs refreshed:
 
 Removed modules:
   [list any modules that were in fences but no longer in graph]
+
+Changelog draft (doc/changelog.txt):
+  [+N added, -M removed] structural changes drafted — review/edit the auto-draft block
 
 User content: untouched (all content outside <!-- graphify:auto --> preserved)
 ```
