@@ -488,7 +488,14 @@ When all subtasks are complete:
    `/forge-orchestrate` does **not** tag — releases/tags stay a manual step you run when you want one.
 2. Update `doc/progress.txt` with the current status.
 3. Append to `doc/changelog.txt` (`Date | Change | Description`, matching contextmap's format).
-4. If `[TASK]` came from `doc/task-list.md`, tick its `[ ]` → `[x]`.
+4. Update `doc/task-list.md` if it exists — regardless of whether `[TASK]` came from the list:
+   - Find the incomplete `[ ]` line that best matches `[TASK]` (semantic match on the goal, not an
+     exact string match). If one matches, tick it `[ ]` → `[x]`.
+   - If no line matches (an ad-hoc request not on the list), append `[x] [TASK]` under a
+     `## Completed (orchestrated)` section — create that section once if it isn't there — so the
+     master list reflects what actually shipped.
+   - Only tick or append; never rewrite, reorder, or reword existing user-authored lines.
+   - Skip silently if `doc/task-list.md` does not exist.
 5. **Generate the CD release-readiness report** — write `doc/release-readiness.md`. Map every CD
    checklist item `/forge-orchestrate` cannot execute locally to a status/owner line, each marked
    **"needs your CI/CD platform — not run locally."** Group them:
