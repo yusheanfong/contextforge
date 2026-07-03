@@ -284,24 +284,6 @@ Project initialized. No tasks completed yet.
 Waiting to begin Phase 1.
 ```
 
-**File 11: `doc/Progress/Progress-N.txt`**
-
-```
-# Task Progress Template
-# Copy this file and rename to Progress-1.txt, Progress-2.txt, etc.
-
-## Task
-[Task name from task-list.md]
-
-## Status
-[ ] In Progress  [ ] Completed
-
-## Files Modified
--
-
-## Notes
-```
-
 ### Step N3: Generate Draft Task List
 
 Based on `[GOAL]` and `[TECH_STACK]`, generate a realistic phased task list. Write it to `doc/task-list.md` and then present it to the user:
@@ -319,18 +301,18 @@ The task list format:
 [GOAL]
 
 ## Phase 1 — Foundation
-[ ] [Task derived from goal and stack]
-[ ] [Task]
-[ ] [Task]
+- [ ] [Task derived from goal and stack]
+- [ ] [Task]
+- [ ] [Task]
 
 ## Phase 2 — Core Features
-[ ] [Task]
-[ ] [Task]
-[ ] [Task]
+- [ ] [Task]
+- [ ] [Task]
+- [ ] [Task]
 
 ## Phase 3 — Polish & Launch
-[ ] [Task]
-[ ] [Task]
+- [ ] [Task]
+- [ ] [Task]
 
 ## Notes
 Update this file as requirements evolve. Only implement the NEXT incomplete task.
@@ -353,7 +335,6 @@ Files created:
   doc/task-list.md        ← APPROVED, your master to-do
   doc/changelog.txt
   doc/progress.txt
-  doc/Progress/Progress-N.txt (template)
 
 Next steps:
 1. Fill in [FILL IN: ...] placeholders in /doc files
@@ -757,15 +738,18 @@ If `doc/task-list.md` does not exist, create it:
 # Master Task List
 
 ## Phase 1 — [infer from codebase state]
-[ ] [FILL IN]
+- [ ] [FILL IN]
 
 ## Notes
 Update this file as requirements evolve. Implement ONLY the next incomplete task.
 ```
 
-If `doc/task-list.md` already exists, DO NOT modify it — it's 100% user-owned.
+If `doc/task-list.md` already exists, `/forge-contextmap` never rewrites its content — it's
+user-authored. (Note: `/forge-orchestrate` is the one exception — on completion it ticks a task's
+`[ ]` → `[x]`, or appends a `[x]` entry under `## Completed (orchestrated)` when the shipped feature
+wasn't on the list. That is status bookkeeping, not a contextmap rewrite.)
 
-Create `doc/changelog.txt`, `doc/progress.txt`, `doc/Progress/Progress-N.txt` only if they don't exist (same templates as NEW PROJECT MODE).
+Create `doc/changelog.txt`, `doc/progress.txt` only if they don't exist (same templates as NEW PROJECT MODE).
 
 ### Step E8: Install Post-Commit Hook
 
@@ -860,13 +844,6 @@ For each doc file that has `<!-- graphify:auto start:... -->` markers:
    - Keep all content outside the markers exactly as-is
 4. Write the updated file back
 
-If a fence key references a `source_file` path that no longer exists in `graph.json`:
-- Replace the fence content with:
-  ```
-  <!-- graphify:removed: [node label] (last seen: [TODAY'S DATE]) -->
-  ```
-- Keep the outer fence markers so the user can see it and manually clean up
-
 ### Step S5: Report Changes
 
 Print a summary of what changed:
@@ -879,9 +856,6 @@ Docs refreshed:
   doc/architecture.md   — [N] sections updated
   doc/domain-model.md   — [N] sections updated
   [...]
-
-Removed modules:
-  [list any modules that were in fences but no longer in graph]
 
 Changelog draft (doc/changelog.txt):
   [+N added, -M removed] structural changes drafted — review/edit the auto-draft block
@@ -900,14 +874,11 @@ DO NOT manually edit — changes will be overwritten.
 <!-- graphify:auto end:QUALIFIED_KEY:SECTION -->
 ```
 
-**Key format**: `source_file_path:section_name` for module-specific content, or `project:section_name` for project-level summaries.
+**Key format**: `project:section_name` for project-level summaries.
 
-Examples:
-- `<!-- graphify:auto start:src/auth/auth_service:architecture -->`
+Example:
 - `<!-- graphify:auto start:project:domain-model -->`
 
 **Rules**:
 - Content inside fences: overwritten on every sync
 - Content outside fences: never touched
-- Fully-qualified keys prevent collision between modules with the same short name
-- Removed module stubs: `<!-- graphify:removed: ModuleName (last seen: YYYY-MM-DD) -->`
