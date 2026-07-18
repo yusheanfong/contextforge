@@ -82,11 +82,18 @@ tree for the user to review and commit.
 
 - If `$ARGUMENTS` (flags stripped) is non-empty, that is the request.
 - If `$ARGUMENTS` is empty:
-  - If `doc/task-list.md` exists, read it and offer the next incomplete `[ ]` task. Wait for
-    confirmation.
+  - If `doc/task-list.md` exists, read it and offer the next incomplete task. Wait for
+    confirmation. Format detection:
+    - **v2 engineering-plan format** (`### Task N.M` blocks): the next incomplete task is the
+      first `### Task N.M` in document order whose `- [ ] done` is unchecked AND whose
+      `Depends on` tasks are all done (`Depends on: none` is always eligible). Carry its
+      `Acceptance criteria` lines and `Builds: Fn` reference forward — Phase 1 uses them.
+    - **v1 flat format** (plain `- [ ]` lines, unmigrated project): the first incomplete `[ ]`
+      line, as before.
   - Otherwise ask: `"What feature should I orchestrate?"` and wait.
 
-Store the request as `[TASK]`.
+Store the request as `[TASK]`. If it came from a v2 task block, also store `[TASK_CRITERIA]`
+(its acceptance-criteria lines) and `[TASK_FEATURE]` (its `Builds:` PRD feature ref).
 
 ### 0e. Ambiguity scan — the "ask only if unclear" rule
 
@@ -118,7 +125,12 @@ Slugify `[TASK]` into `feature/<slug>` (e.g. "create a feature where the login b
 Break `[TASK]` into an ordered list of subtasks. For each subtask record:
 
 - **goal** — one line
-- **success criterion** — a verifiable check (test passes, output matches, file exists)
+- **success criterion** — a verifiable check (test passes, output matches, file exists).
+  **If `[TASK_CRITERIA]` exists** (task came from a v2 task-list block), derive success criteria
+  FROM those acceptance-criteria lines — don't invent parallel ones. The "works as expected"
+  criterion becomes the behavioral check; "test added" is already mandated by Phase 4; "no errors"
+  maps to the lint gate; "meets PRD requirement [Fn]" makes `doc/prd.md`'s feature Fn part of the
+  spec-compliance check in 5b.1.
 - **depends on** — which earlier subtasks must finish first (or `none`)
 - **independent** — `yes` if it can run in parallel with its siblings, else `no`
 - **gate set** — which CI gates apply (default: all detected; note any to skip, e.g. docs-only edit)
@@ -254,13 +266,16 @@ the script above is the dependency-free default.
 
 ### 3b. Doc slice
 
-From the `FILES` the slice returned, pick the matching domain docs and ALWAYS add the three
-universal docs. Read only these — never the whole `doc/` set:
+From the `FILES` the slice returned, pick the matching domain docs and ALWAYS add the universal
+docs. Read only these — never the whole `doc/` set:
 
-- **Always:** `doc/architecture.md`, `doc/solution-structure.md`, `doc/coding-standard.md`
-- UI/screen/widget/view/component sources → `doc/ui-guideline.md`
+- **Always:** `doc/architecture.md`, `doc/solution-structure.md`, `doc/coding-standard.md`, and
+  `doc/prd.md` if it exists (small — it's the scope guard for spec compliance)
+- UI/screen/widget/view/component sources → `doc/design-brief.md` + `doc/app-flow.md`
+  (v1 fallback: `doc/ui-guideline.md` if the project hasn't migrated)
 - controller/service/handler/endpoint/route/api sources → `doc/api-contract.md`
-- entity/model/enum/domain sources → `doc/domain-model.md`
+  + `doc/backend-schema.md` if it exists
+- entity/model/enum/domain sources → `doc/domain-model.md` + `doc/backend-schema.md` if it exists
 - auth/token/permission/role sources → `doc/security.md`
 
 (Keep this source→doc mapping aligned with `/forge-contextmap`'s doc set — if contextmap renames a
@@ -275,6 +290,8 @@ Assemble the worker prompt from: the subtask **goal** + **success criterion** + 
 - Edit only the files needed for THIS subtask.
 - Write/update tests and run them; report results.
 - Keep lint/style clean — match the project's existing conventions.
+- UI subtasks: use ONLY doc/design-brief.md tokens and components — no ad-hoc hex values, font
+  sizes, spacing values, or one-off components. Need something new? Report it; don't invent it.
 - Do NOT git commit and do NOT touch unrelated code.
 - If you lack context to proceed, stop and report NEEDS_CONTEXT with what's missing.
 - Return: what you changed (files + summary) and test results.
@@ -385,7 +402,8 @@ record each result as `pass` / `fail` / `skipped (reason)`:
 ### 5b. Review checks
 
 1. **Spec compliance** — does the worker output do exactly what the subtask asked (nothing
-   missing, nothing extra)?
+   missing, nothing extra)? If the subtask carries a `Builds: Fn` reference, check the diff
+   against that feature's line in `doc/prd.md`.
 2. **Quality** — only after spec passes — is it well-built (tests real, no obvious smell)?
 3. **Over-engineering** *(always runs)* — an over-engineering review pass on THIS worker's diff:
    flag speculative abstractions, unrequested flexibility, reinvented stdlib/deps, and dead
@@ -404,6 +422,12 @@ record each result as `pass` / `fail` / `skipped (reason)`:
    **Scope guard — never delete-list these:** the tests Phase 4 mandates, and any file needed to
    satisfy the subtask's success criterion. Minimality never overrides the "workers must write
    tests" rule.
+4. **Design compliance** *(UI subtasks only — skip when `doc/design-brief.md` doesn't exist)* —
+   scan the diff for style values: every color, font size, spacing, and radius must come from
+   `doc/design-brief.md` tokens, and components must be the brief's reusable ones. An ad-hoc hex
+   value, magic font size, or one-off component = review FAILURE routed through the same bounded
+   loop (5c) with the offending values listed. If the value is genuinely needed, the fix is to add
+   it to `design-brief.md` first (surface that to the user), not to hardcode it.
 
 Either dispatch a reviewer subagent (read-only) with the criterion + the worker's diff, or
 review directly.
@@ -456,7 +480,7 @@ Record the sub-branch + commit SHA in the subtask state. Merge-back happens in 5
 
 End every commit message with:
 ```
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
 Record the commit SHA(s) in the subtask state. Mark the subtask complete.
@@ -489,11 +513,19 @@ When all subtasks are complete:
 2. Update `doc/progress.txt` with the current status.
 3. Append to `doc/changelog.txt` (`Date | Change | Description`, matching contextmap's format).
 4. Update `doc/task-list.md` if it exists — regardless of whether `[TASK]` came from the list:
-   - Find the incomplete `[ ]` line that best matches `[TASK]` (semantic match on the goal, not an
-     exact string match). If one matches, tick it `[ ]` → `[x]`.
-   - If no line matches (an ad-hoc request not on the list), append `[x] [TASK]` under a
+   - **v2 engineering-plan format** (`### Task N.M` blocks): find the task block that best matches
+     `[TASK]` (semantic match on the title/goal, not an exact string match). If one matches:
+     - tick its `- [ ] done` → `- [x] done`
+     - tick ONLY the acceptance-criteria boxes the gates actually verified: `test added` ← tests
+       gate passed, `no errors` ← lint gate passed, `works as expected` ← the success-criterion
+       check passed, `meets PRD requirement` ← spec-compliance (5b.1) passed. Leave anything
+       unverified unticked — never fake a check.
+   - **v1 flat format**: find the incomplete `[ ]` line that best matches `[TASK]`; tick it
+     `[ ]` → `[x]`.
+   - If nothing matches (an ad-hoc request not on the list), append under a
      `## Completed (orchestrated)` section — create that section once if it isn't there — so the
-     master list reflects what actually shipped.
+     master list reflects what actually shipped. In a v2 file append a minimal task block
+     (`### Task — [TASK]` + `- [x] done`); in a v1 file append `- [x] [TASK]`.
    - Only tick or append; never rewrite, reorder, or reword existing user-authored lines.
    - Skip silently if `doc/task-list.md` does not exist.
 5. **Generate the CD release-readiness report** — write `doc/release-readiness.md`. Map every CD

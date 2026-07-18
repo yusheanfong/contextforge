@@ -18,8 +18,9 @@ Claude Code starts every session cold. It reads `CLAUDE.md` (auto-loaded, ~600 t
 
 `/forge-contextmap` solves both the scaffolding problem and the accuracy problem:
 
-- **New project** — asks your goal, enhances it, scaffolds all docs, generates a phased task plan
+- **New project** — asks your goal + features + design vibe, enhances them, scaffolds the full v2 doc set (PRD, app flow, design brief, backend schema), generates a phased engineering plan
 - **Existing project** — analyzes your codebase, extracts real architecture knowledge, fills docs with actual data, waits for your validation
+- **Migration** — detects an old-format (v1) `doc/` set and upgrades it to v2 in place, preserving every user-authored line verbatim
 - **Sync** — keeps docs in sync as code evolves, never overwriting your manual content
 
 ---
@@ -94,10 +95,12 @@ Or force new project mode:
 Flow:
 1. Asks: *"What's the final goal of this project?"*
 2. Enhances your raw description into a polished 2–4 sentence goal — shows it to you for approval
-3. Asks: *"What's the tech stack / language?"*
-4. Scaffolds all doc files with your goal as the seed
-5. Generates a realistic phased task list → shows it for your approval before saving
-6. Installs a post-commit hook (silently rebuilds the graph on every commit)
+3. Asks: *"What's the tech stack / language?"* (infers whether you have a UI and/or backend)
+4. Asks: *"List the core features"* → structures them into a prioritized PRD (`F1 (P0)`, `F2 (P1)`, …) for your approval
+5. If there's a UI, asks one design question (*"describe the look/vibe or brand colors"*) → generates a **complete concrete design system** — hex color tokens, font + type scale, spacing/radius, reusable component inventory — for your approval. No randomness: every future screen uses these exact values.
+6. Scaffolds all doc files (PRD, app flow, design brief, backend schema if applicable, + the architecture/domain/api/structure/standards/security set)
+7. Generates a phased **engineering plan** (`doc/task-list.md`): small tasks with build order, `Depends on`, a PRD feature link, and 4 acceptance criteria each (works as expected / no errors / meets requirement / test added) → shows it for approval before saving
+8. Installs a post-commit hook (silently rebuilds the graph on every commit)
 
 No Python required for new projects. Graphify activates on first sync once you have code.
 
@@ -120,9 +123,27 @@ Flow:
    - Entry points
    - Public API surface
    - Dominant coding patterns
-5. Asks: *"Does this match your understanding? What should I add or correct?"*
-6. Applies your corrections, then populates all doc files
-7. Installs the post-commit hook
+5. Asks: *"Does this match your understanding? What should I add or correct?"* — including an inferred core-feature list that becomes your PRD
+6. If UI code is detected: extracts your existing theme/tokens (or asks the vibe question) → concrete design brief
+7. Applies your corrections, then populates all doc files (backend schema included when backend code is detected)
+8. Installs the post-commit hook
+
+### Migration (old-format projects)
+
+Already ran an older ContextForge on a project? Just run:
+
+```
+/forge-contextmap
+```
+
+It detects a v1 `doc/` set (no `<!-- contextforge:format v2 -->` marker in `CLAUDE.md`) and upgrades in place:
+
+- Creates `prd.md` (features inferred + confirmed by you), `app-flow.md`, `backend-schema.md` (if backend)
+- `design-brief.md` absorbs **all** of `ui-guideline.md` verbatim into a *UX Rules (migrated)* section — the old file is deleted only after you approve
+- `task-list.md` converts to the engineering-plan format — every task line and checkbox state preserved verbatim; completed tasks are marked *migrated as completed*, and no acceptance criteria are fabricated as ticked
+- `CLAUDE.md` gets the v2 navigation/rules + format marker; everything you wrote stays untouched
+
+**Guarantee: no user-authored line is dropped or reworded — content is moved, never rewritten.**
 
 ### Sync
 
@@ -157,11 +178,11 @@ Flow:
 1. **Hard stop** if no `graphify-out/graph.json` — run `/forge-contextmap` first
 2. **Clarify only if ambiguous** — asks about scope/criteria only for a genuinely unclear request; otherwise states its assumptions and runs hands-off
 3. **Branch** — creates `feature/<slug>` and works there
-4. **Decompose** the task into subtasks (goal, success criterion, dependencies, gate set)
-5. **Graph slice per subtask** — reads `graph.json`, finds the touched nodes' community + neighborhood, and pulls only the matching `doc/*` files (plus the three universal docs)
+4. **Decompose** the task into subtasks (goal, success criterion, dependencies, gate set). Run with no arguments and it picks the next eligible task from the engineering plan — dependency-aware — and uses that task's own acceptance criteria as the success criteria
+5. **Graph slice per subtask** — reads `graph.json`, finds the touched nodes' community + neighborhood, and pulls only the matching `doc/*` files (plus the universal docs: architecture, structure, standards, and the PRD as scope guard). UI subtasks get `design-brief.md` + `app-flow.md`; data/API subtasks get `backend-schema.md` when it exists
 6. **Dispatch workers** — 2+ independent subtasks each run in an isolated **git worktree** (real parallelism, overlapping edits surface as a visible merge conflict); lone/dependent subtasks run single-tree
 7. **CI gates** — adaptive and honest: lint, tests, coverage, dependency-vuln, secrets (hard block), SAST, over-engineering. Runs what your project has, skips + *honestly reports* what it doesn't — never a fake green check
-8. **Bounded review loop** — spec, then quality, then an over-engineering pass; max 3 iterations per subtask
+8. **Bounded review loop** — spec (against the PRD feature the task `Builds:`), then quality, then an over-engineering pass, then **design compliance** on UI subtasks (every color/font/spacing in the diff must come from `design-brief.md` tokens — ad-hoc hex values fail review); max 3 iterations per subtask
 9. **Commit per subtask** on the branch once its gates pass
 10. **Synthesize** — clean summary, updates `progress.txt` / `changelog.txt`, ticks the task, and writes `doc/release-readiness.md` (the CD steps it can't run locally: deploy, canary, monitoring, rollback, DAST)
 
@@ -220,27 +241,49 @@ Requires Python 3.10+ (to read the graph) and a project that has already run `/f
 
 ```
 your-project/
-├── CLAUDE.md                    ← Auto-loaded every session (goal + architecture summary + rules)
+├── CLAUDE.md                    ← Auto-loaded every session (goal + architecture summary + rules + v2 format marker)
 ├── .git/hooks/post-commit       ← Silently rebuilds graph on every commit
 ├── graphify-out/
 │   ├── graph.json               ← Knowledge graph (Graphify-managed, don't edit)
 │   ├── graph.prev.json          ← Last-sync snapshot (powers the auto-changelog diff)
 │   └── GRAPH_REPORT.md          ← Human-readable graph summary
 └── doc/
+    ├── prd.md                   ← Product requirements: idea overview, core features F1..Fn, out of scope (100% yours)
+    ├── app-flow.md              ← Entry point, screen/step map, user journeys, data flow
+    ├── design-brief.md          ← Color tokens, typography, components, screen style (UI projects)
+    ├── backend-schema.md        ← Storage, entities/tables, relations, indexes (backend projects)
     ├── architecture.md          ← Tech stack, detected patterns, design rules
     ├── domain-model.md          ← Entities, relationships, business rules
     ├── api-contract.md          ← API surface, services, interfaces
     ├── solution-structure.md    ← Folder layout, dependency flow
     ├── coding-standard.md       ← Detected patterns + your standards
     ├── security.md              ← Auth components + your security rules
-    ├── ui-guideline.md          ← UI components + your UX rules
-    ├── task-list.md             ← Master task list (100% yours — never graph-populated)
+    ├── task-list.md             ← Engineering plan (100% yours — never graph-populated)
     ├── changelog.txt            ← Updated after every change
     ├── progress.txt             ← Current status (kept short)
-    ├── release-readiness.md     ← Written by /forge-orchestrate — CD steps to run on your platform
-    └── Progress/
-        └── Progress-N.txt       ← Per-task detailed logs
+    └── release-readiness.md     ← Written by /forge-orchestrate — CD steps to run on your platform
 ```
+
+### The Engineering Plan Format (`doc/task-list.md`)
+
+Small tasks, explicit build order, verifiable done:
+
+```markdown
+## Phase 1 — Foundation
+### Task 1.2 — Login screen
+- [ ] done
+- Depends on: Task 1.1
+- Builds: F2
+- Acceptance criteria:
+  - [ ] works as expected: user can log in and reach home
+  - [ ] no errors (lint/console clean)
+  - [ ] meets PRD requirement F2
+  - [ ] test added
+```
+
+`/forge-orchestrate` picks the next task whose dependencies are done, uses the acceptance criteria
+as its success criteria, and on completion ticks `done` plus only the criteria its gates actually
+verified (tests gate → *test added*, lint gate → *no errors*, …) — never a fake check.
 
 ---
 
@@ -332,12 +375,13 @@ Not all code is equally important. God nodes are the concepts with the most conn
 
 `/forge-contextmap` writes these rules into `CLAUDE.md`:
 
-1. Before writing code, always read the universal docs (`architecture.md`, `solution-structure.md`, `coding-standard.md`), then read only the domain docs the task touches (decided from `task-list.md` + `GRAPH_REPORT.md`) — not every `/doc` file
-2. Implement ONLY the next incomplete task from `task-list.md`
+1. Before writing code, always read the universal docs (`architecture.md`, `solution-structure.md`, `coding-standard.md`, `prd.md`), then read only the domain docs the task touches (UI → `design-brief.md` + `app-flow.md`; data → `domain-model.md` + `backend-schema.md`; API → `api-contract.md`; auth → `security.md`) — not every `/doc` file
+2. Implement ONLY the next task in `task-list.md` whose dependencies are all done
 3. Update `progress.txt` after every completed task
 4. Update `changelog.txt` after every change (`Date | Change | Description`)
 5. Follow `solution-structure.md` exactly — no structural changes
-6. Never invent schema, fields, or endpoints not defined in the docs
+6. UI code uses ONLY `design-brief.md` tokens and components — no ad-hoc hex values or one-off components
+7. Never invent schema, fields, or endpoints not defined in the docs
 
 ```
 Session N:   auto-load CLAUDE.md → read task-list → implement → update progress + changelog → commit
