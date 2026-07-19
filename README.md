@@ -27,20 +27,28 @@ Claude Code starts every session cold. It reads `CLAUDE.md` (auto-loaded, ~600 t
 
 ## Install
 
+`/forge-contextmap` is packaged as a **skill**: a thin `SKILL.md` router plus `references/` files
+loaded per mode (progressive disclosure — only the active mode's instructions enter context). The
+command file is a small stub that routes to the skill, so `/forge-contextmap` keeps working.
+
 **Global** (available in all projects):
 
 ```bash
-mkdir -p ~/.claude/commands
-curl -o ~/.claude/commands/forge-contextmap.md \
-  https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/forge-contextmap.md
+git clone --depth 1 https://github.com/yusheanfong/contextforge /tmp/contextforge
+mkdir -p ~/.claude/skills ~/.claude/commands
+cp -R /tmp/contextforge/.claude/skills/forge-contextmap ~/.claude/skills/
+cp /tmp/contextforge/.claude/commands/forge-contextmap.md ~/.claude/commands/
+rm -rf /tmp/contextforge
 ```
 
 **Project-level** (this project only):
 
 ```bash
-mkdir -p .claude/commands
-curl -o .claude/commands/forge-contextmap.md \
-  https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/forge-contextmap.md
+git clone --depth 1 https://github.com/yusheanfong/contextforge /tmp/contextforge
+mkdir -p .claude/skills .claude/commands
+cp -R /tmp/contextforge/.claude/skills/forge-contextmap .claude/skills/
+cp /tmp/contextforge/.claude/commands/forge-contextmap.md .claude/commands/
+rm -rf /tmp/contextforge
 ```
 
 **For existing project analysis**, you also need Python 3.10+. `/forge-contextmap` installs Graphify automatically when it needs it.
