@@ -19,5 +19,5 @@ Example:
 **Rules**:
 - Content inside fences: overwritten on every sync
 - Content outside fences: never touched
-- `doc/prd.md` and `doc/task-list.md` have NO fences — 100% user-owned (orchestrate's
-  status ticks are the sole exception for task-list.md)
+- `doc/prd.md`, `doc/task-list.md` and `doc/diagnosis-*.md` have NO fences — 100% user-owned
+  (orchestrate's status ticks are the sole exception for task-list.md)

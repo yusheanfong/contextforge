@@ -19,6 +19,9 @@ content preserved.
   never touched.
 - `/forge-contextmap` never rewrites `doc/task-list.md` content — it's user-authored.
   (`/forge-orchestrate`'s status ticks are the sole exception.)
+- `/forge-contextmap` never rewrites or deletes `doc/diagnosis-*.md` — written by
+  `/forge-diagnose`, fully user-owned, no fences. MIGRATION MODE reads every file in `doc/`; it must
+  treat these as untouchable, not as v1 docs needing upgrade.
 - User-authored content is preserved verbatim — moved, never rewritten.
 - `doc/prd.md` and `doc/task-list.md` have NO fences — 100% user-owned.
 - Fence syntax + v2 fence key list: `references/fence-format.md`.

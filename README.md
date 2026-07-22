@@ -1,14 +1,15 @@
 # ContextForge
 
-A three-command suite for Claude Code that shares one live knowledge graph: scaffold the workflow, execute features against it, and sweep it for bloat — all reading the same map of your codebase.
+A four-command suite for Claude Code that shares one live knowledge graph: scaffold the workflow, execute features against it, sweep it for bloat, and diagnose what breaks — all reading the same map of your codebase.
 
 ```
 /forge-contextmap   → scaffold docs + build the graph   (start here)
 /forge-orchestrate  → execute a feature against the graph
 /forge-audit        → sweep the repo for over-engineering
+/forge-diagnose     → find root cause, change nothing, hand off
 ```
 
-`/forge-contextmap` is the entry point — the other two hard-stop until it has built the graph.
+`/forge-contextmap` is the entry point — `/forge-orchestrate` and `/forge-audit` hard-stop until it has built the graph. `/forge-diagnose` doesn't: it uses the graph when present and greps when not, so a bug is never blocked behind a graph build.
 
 ---
 
@@ -57,13 +58,14 @@ rm -rf /tmp/contextforge
 
 ## Pipeline — Which Command When
 
-The three commands share one graph and run in a loop:
+The four commands share one graph and run in a loop:
 
 ```
 Setup (once)         /forge-contextmap                → scaffold docs + build graph + post-commit hook
 Per feature          /forge-orchestrate <feature>     → branch + graph-scoped agents + CI gates + commits
                      → review the diff → merge the branch
                      /forge-contextmap sync           → refresh the <!-- graphify:auto --> doc fences
+When something breaks /forge-diagnose <issue>         → root cause (no code changes) + handoff prompt
 Periodic / on-demand /forge-audit                     → whole-repo bloat sweep (read-only)
 ```
 
@@ -77,6 +79,7 @@ The post-commit hook rebuilds `graph.json` on every commit yet never writes docs
 | `/forge-contextmap` | Starting out, or refreshing docs after code changes (`sync`) | `doc/*`, `graph.json`, post-commit hook | never commits |
 | `/forge-orchestrate <feature>` | Building a new feature end-to-end | code + tests, `release-readiness.md`, progress/changelog | commits per subtask on a branch (opt out with `--no-commit`) |
 | `/forge-audit [path]` | Cleaning up accumulated bloat, before a refactor or release | nothing (report-only) | never commits |
+| `/forge-diagnose <issue>` | Something is broken and the fix will run in another session | `doc/diagnosis-<slug>.md` only | never commits |
 
 **`/forge-audit` vs `/forge-orchestrate`'s built-in review:** `/forge-orchestrate` reviews a *single fresh diff* at
 commit time (its over-engineering gate). `/forge-audit` sweeps *already-landed* code across the whole repo.
@@ -245,6 +248,53 @@ Requires Python 3.10+ (to read the graph) and a project that has already run `/f
 
 ---
 
+## /forge-diagnose — Find the Root Cause, Hand It Off
+
+A **discussion-driven diagnosis** session for when something is broken. It investigates actively —
+runs the program, runs your tests, hits endpoints, reads logs — but **never changes a line of
+code**. It ends by writing a handoff prompt: a self-contained instruction the *next* session pastes
+in and executes without re-exploring the codebase.
+
+```
+/forge-diagnose checkout returns 500 on an empty cart
+```
+
+Two problems this solves. First, **premature fixing** — editing before the root cause is understood.
+Second, **lost investigation** — the exploration lives only in that session's context, so fixing it
+in a fresh session means re-reading the same files from zero.
+
+Flow:
+1. **Interrogate before exploring** — error text, expected vs actual, repro steps, when it started, which environment — asked *before* a single source file is read
+2. **Reproduce** — runs your existing tests/commands and `git log`/`diff`. Reproduced means the root cause can be `[Certain]`; not reproduced means `[Likely]` at best, and it says so
+3. **Locate & trace** — reads `doc/architecture.md` and the graph to scope the search, then traces *backward* from the symptom to where the bad value originates
+4. **Rule out** — records every eliminated hypothesis with the evidence that killed it
+5. **Discussion checkpoint** — presents the root cause and waits for you to confirm, redirect, or go deeper
+6. **Handoff** — writes `doc/diagnosis-<slug>.md`
+
+The handoff carries the root cause with `path` → `symbol` evidence, the reproduction command, the
+ruled-out branches ("do not re-investigate these"), the proposed fix, blast radius, and the
+verification test. Locations are anchored on symbol names, not line numbers, so they survive the
+drift between sessions. Then: `/forge-orchestrate` it, or apply it directly.
+
+**"Never changes code" is a contract, not a sandbox.** `Edit` is left out of `allowed-tools`, but
+the handoff has to be written, so `Write` is present — the guarantee that nothing but
+`doc/diagnosis-*.md` gets written is behavioral.
+
+Unlike `/forge-orchestrate` and `/forge-audit`, it does **not** require the graph — it uses it when
+present and greps when not.
+
+**Install** — packaged as a skill, same as `/forge-contextmap`:
+
+```bash
+git clone --depth 1 https://github.com/yusheanfong/contextforge /tmp/contextforge
+mkdir -p ~/.claude/skills ~/.claude/commands
+cp -R /tmp/contextforge/.claude/skills/forge-diagnose ~/.claude/skills/
+cp /tmp/contextforge/.claude/commands/forge-diagnose.md ~/.claude/commands/
+rm -rf /tmp/contextforge
+```
+
+---
+
 ## What Gets Created
 
 ```
@@ -269,7 +319,8 @@ your-project/
     ├── task-list.md             ← Engineering plan (100% yours — never graph-populated)
     ├── changelog.txt            ← Updated after every change
     ├── progress.txt             ← Current status (kept short)
-    └── release-readiness.md     ← Written by /forge-orchestrate — CD steps to run on your platform
+    ├── release-readiness.md     ← Written by /forge-orchestrate — CD steps to run on your platform
+    └── diagnosis-<slug>.md      ← Written by /forge-diagnose — root cause + handoff for the fix session
 ```
 
 ### The Engineering Plan Format (`doc/task-list.md`)

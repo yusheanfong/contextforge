@@ -29,6 +29,7 @@ All project docs live in /doc:
 - doc/coding-standard.md  — Language and framework conventions
 - doc/security.md         — Auth, roles, data protection rules
 - doc/task-list.md        — Engineering plan / master task list (YOUR ONLY TODO SOURCE)
+- doc/diagnosis-*.md      — Completed root-cause diagnoses from /forge-diagnose  [if any exist]
 - doc/changelog.txt       — Change log
 - doc/progress.txt        — Current status
 
@@ -49,6 +50,7 @@ When Graphify runs for the first time (after code exists), run /forge-contextmap
 5. Follow doc/solution-structure.md exactly — no structural changes.
 6. UI code: use ONLY doc/design-brief.md tokens and components — no ad-hoc hex values, font sizes, spacing values, or one-off components.
 7. Never invent schema fields, entities, or endpoints not defined in doc/backend-schema.md, doc/domain-model.md, or doc/api-contract.md.
+8. Fixing a bug and a doc/diagnosis-*.md covers it → read that file FIRST and follow it. The investigation is already done; do not re-explore the codebase for the same root cause.
 
 ## Coding Rules
 
