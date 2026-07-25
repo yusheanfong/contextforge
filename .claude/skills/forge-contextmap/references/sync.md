@@ -45,6 +45,55 @@ Auto-draft structural changelog entries from what actually changed, so the log c
 
 Keep the `removed` list in memory — Step S4 uses it for tombstones.
 
+### Step S3.6: Bloat Signal (counts only)
+
+The graph is already loaded — surface the three `/forge-audit` signals cheaply so accumulated bloat
+gets noticed without waiting for someone to remember to audit. **Counts only.** Do not open a single
+source file, do not evaluate anything against the ladder, do not report findings — that is
+`/forge-audit`'s job, and doing it here would turn a routine sync into a slow interactive review.
+
+```bash
+[PYTHON_CMD] - <<'PY'
+import json
+from collections import defaultdict
+from pathlib import Path
+from networkx.readwrite import json_graph
+
+# forge:shared-block graph-loader
+data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
+G = json_graph.node_link_graph(data, edges='links')
+
+def label_of(n):
+    return G.nodes[n].get('label', str(n))
+
+def src_of(n):
+    s = G.nodes[n].get('source_file')
+    return s.replace("\\", "/") if s else None
+# /forge:shared-block graph-loader
+
+nodes = [n for n in G.nodes() if src_of(n)]
+
+# forge:shared-block bloat-buckets — thresholds MUST match forge-audit/SKILL.md Phase 1
+orphans = [n for n in nodes if G.degree(n) <= 1]
+
+by_label = defaultdict(set)
+for n in nodes:
+    by_label[label_of(n)].add(src_of(n))
+dups = [lab for lab, srcs in by_label.items() if len(srcs) > 1]
+
+degs = sorted((G.degree(n) for n in nodes), reverse=True)
+med = degs[len(degs) // 2] if degs else 0
+cut = max(degs[max(0, len(degs) // 10 - 1)] if degs else 0, 3 * med, 5)
+gods = [n for n in nodes if G.degree(n) >= cut]
+# /forge:shared-block bloat-buckets
+
+print(f"BLOAT {len(orphans)} {len(dups)} {len(gods)}")
+PY
+```
+
+Carry the three numbers into the S5 report. Best-effort — if the script fails, omit the line rather
+than blocking the sync.
+
 ### Step S4: Fence-Aware Merge
 
 For each doc file that has `<!-- graphify:auto start:... -->` markers (v2 set:
@@ -86,5 +135,12 @@ Changelog draft (doc/changelog.txt):
   [+N added, -M removed] structural changes drafted — review/edit the auto-draft block
 Tombstones: [N] removed modules marked <!-- graphify:removed --> in doc fences
 
+Bloat signal: [N] orphan nodes, [M] duplicate labels, [K] god nodes
+  → run /forge-audit for the confirmed list
+
 User content: untouched (all content outside <!-- graphify:auto --> preserved)
 ```
+
+If all three bloat counts are zero, print `Bloat signal: clean` instead. These are graph pointers,
+not findings — say so if the user reacts to them. `/forge-audit` confirms each against real source
+before anything is called bloat.

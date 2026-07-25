@@ -1,6 +1,7 @@
 ---
 name: forge-diagnose
 description: Root-cause diagnosis that never changes code, ending in a cross-session handoff prompt (/forge-diagnose). Use when something is broken and the fix will be executed in a different session — a bug, test failure, crash, regression, or unexpected behavior that needs investigating before any code is touched. Triggers include "/forge-diagnose", "diagnose this bug", "find the root cause", "why is this failing", "investigate before fixing".
+argument-hint: "[issue to diagnose]"
 allowed-tools: Read, Grep, Glob, Bash, AskUserQuestion, Write
 ---
 

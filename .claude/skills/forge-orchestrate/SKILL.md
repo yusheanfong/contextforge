@@ -1,3 +1,9 @@
+---
+name: forge-orchestrate
+description: CI/CD-gated autonomous feature pipeline (/forge-orchestrate). Use when building a feature end-to-end against the knowledge graph — decompose, branch, dispatch graph-scoped worker subagents, run lint/test/secrets/over-engineering gates, commit per subtask. Also use to execute a /forge-diagnose handoff. Triggers include "/forge-orchestrate", "orchestrate this feature", "build the next task", "run the pipeline", "execute the diagnosis".
+argument-hint: "[feature | doc/diagnosis-*.md] [--no-commit]"
+---
+
 # /forge-orchestrate — CI/CD-Gated Autonomous Feature Pipeline
 
 Take one feature request and run it end-to-end: parse intent → decompose → branch → dispatch
@@ -9,13 +15,11 @@ worker is fed ONLY the doc files and graph nodes its subtask touches. Context is
 from `graphify-out/graph.json` (built by `/forge-contextmap`), not hand-curated.
 
 Companion to `/forge-contextmap`: contextmap builds the map, `/forge-orchestrate` uses it to execute.
-Reads `$ARGUMENTS` as the feature request.
+Reads `$ARGUMENTS` as the feature request, or as the path to a `/forge-diagnose` handoff.
 
-**What changed from the old behavior:** `/forge-orchestrate` now creates a feature branch and commits per
-subtask. This **reverses the old "never commit, history stays yours" rule** — it is intentional. It
-never tags and never merges to `main` — you own releases. If you want the old hands-off-git
-behavior, pass **`--no-commit`**: the full pipeline + gates run, but no branch and no commits are
-made (you review the working tree and commit yourself).
+**This command commits** (feature branch + per-subtask commits). It never tags and never merges to
+`main` — you own releases. Pass **`--no-commit`** to run the full pipeline + gates with zero git
+writes (you review the working tree and commit yourself).
 
 **Roles (mapped from the multi-agent blueprint):** Coordinator = intent-parse + decompose · Engineer
 = worker subagent that edits code + writes tests · QA/Critic = the CI gate runner + review loop ·
@@ -25,12 +29,22 @@ Synthesis = final report + release-readiness.
 `branch`, `subtasks[]` (goal, criterion, deps, independent, gate_set, status, commit_sha),
 `gate_results`, `files_changed`, `commits[]`, `all_gates_pass`.
 
+**Reference files** — read each only when its branch applies, not up front:
+
+| File | Read when |
+|---|---|
+| `references/graph-slice.md` | Phase 3a — always (the slice script lives there) |
+| `references/task-list-formats.md` | `doc/task-list.md` exists (Phase 0d + Phase 6) |
+| `references/worktree-mode.md` | a batch has 2+ independent subtasks AND `[NO_COMMIT]` is false |
+| `references/release-readiness.md` | Phase 6 |
+
 ---
 
 ## PHASE 0: Intent Parsing & Clarification *(Coordinator / Router)*
 
 ### 0a. Graph prerequisite — hard-stop
 
+<!-- forge:shared-block graph-hard-stop -->
 `/forge-orchestrate` is graph-driven. Use the Read tool (or a file check) for `graphify-out/graph.json`
 in the current directory.
 
@@ -41,9 +55,11 @@ If it does NOT exist, print this exact message and STOP — do nothing else (do 
 ❌ /forge-orchestrate is graph-driven and needs graphify-out/graph.json.
 Run /forge-contextmap first to build the knowledge graph, then re-run /forge-orchestrate.
 ```
+<!-- /forge:shared-block graph-hard-stop -->
 
 ### 0b. Resolve the Python interpreter as `[PYTHON_CMD]`
 
+<!-- forge:shared-block python-cmd -->
 1. If `graphify-out/.graphify_python` exists, read it — that one line is the interpreter path
    graphify already validated (uv/pipx/venv-aware). Use it verbatim as `[PYTHON_CMD]`.
 2. Otherwise, detect with the Bash tool:
@@ -55,6 +71,7 @@ Run /forge-contextmap first to build the knowledge graph, then re-run /forge-orc
    ❌ /forge-orchestrate needs Python 3.10+ to read the graph. Install it, then re-run.
    ```
    and STOP.
+<!-- /forge:shared-block python-cmd -->
 
 ### 0c. Graph freshness note (print, don't block)
 
@@ -80,22 +97,32 @@ and strip the flag from the text. Otherwise `[NO_COMMIT] = false`. Under `[NO_CO
 runs every phase and gate but makes NO branch and NO commits — it leaves changes in the working
 tree for the user to review and commit.
 
-- If `$ARGUMENTS` (flags stripped) is non-empty, that is the request.
-- If `$ARGUMENTS` is empty:
-  - If `doc/task-list.md` exists, read it and offer the next incomplete task. Wait for
-    confirmation. Format detection:
-    - **v2 engineering-plan format** (`### Task N.M` blocks): the next incomplete task is the
-      first `### Task N.M` in document order whose `- [ ] done` is unchecked AND whose
-      `Depends on` tasks are all done (`Depends on: none` is always eligible). Carry its
-      `Acceptance criteria` lines and `Builds: Fn` reference forward — Phase 1 uses them.
-    - **v1 flat format** (plain `- [ ]` lines, unmigrated project): the first incomplete `[ ]`
-      line, as before.
-  - Otherwise ask: `"What feature should I orchestrate?"` and wait.
+Then resolve the request, in this order:
+
+1. **Diagnosis handoff** — if `$ARGUMENTS` (flags stripped) names or resolves to a
+   `doc/diagnosis-*.md`, read that file. It is a `/forge-diagnose` handoff: a root cause already
+   established with evidence, and the investigation already done. Map it in:
+   - `[TASK]` ← §7 *Proposed fix*, framed by §1 *Root cause*
+   - `[TASK_CRITERIA]` ← §9 *Verification* — its before/after commands ARE the success criterion
+   - `[BLAST_RADIUS]` ← §8 — carry into Phase 1 as the files-touched hint for decomposition
+   - `[RULED_OUT]` ← §5/§6 — carry into every worker payload as "do not re-investigate these"
+   - Set `[FROM_DIAGNOSIS] = true`. **Skip 0e entirely** — the diagnosis session already resolved
+     the ambiguity, and re-asking is exactly the waste the handoff exists to prevent. If the
+     handoff's §6 *Open questions* section is non-empty, surface those to the user once before
+     proceeding; do not re-derive them.
+2. **Explicit request** — otherwise, if `$ARGUMENTS` (flags stripped) is non-empty, that is the
+   request.
+3. **Next task from the plan** — if `$ARGUMENTS` is empty:
+   - If `doc/task-list.md` exists → read `references/task-list-formats.md` and follow its
+     *Phase 0d* section to pick the next eligible task. Wait for confirmation.
+   - Otherwise ask: `"What feature should I orchestrate?"` and wait.
 
 Store the request as `[TASK]`. If it came from a v2 task block, also store `[TASK_CRITERIA]`
 (its acceptance-criteria lines) and `[TASK_FEATURE]` (its `Builds:` PRD feature ref).
 
 ### 0e. Ambiguity scan — the "ask only if unclear" rule
+
+**Skip this step entirely when `[FROM_DIAGNOSIS]` is true.**
 
 Evaluate `[TASK]` for genuine ambiguity: unclear **scope** (how much is in/out), missing
 **acceptance criteria** (what "done" looks like), or unclear **affected area** (which part of the
@@ -114,6 +141,9 @@ branch references throughout.
 Slugify `[TASK]` into `feature/<slug>` (e.g. "create a feature where the login button works" →
 `feature/login-button-works`). Store as `[BRANCH]`.
 
+**If `[FROM_DIAGNOSIS]` is true**, use `fix/<diagnosis-slug>` instead — reuse the slug from the
+`doc/diagnosis-<slug>.md` filename so the branch, the diagnosis, and the fix all share one name.
+
 - If you are asking clarifying questions in 0e anyway, fold in a branch-name confirmation.
 - If no questions were needed, announce: `Branch: [BRANCH] — proceeding (reply to rename).` and
   continue without blocking.
@@ -126,14 +156,18 @@ Break `[TASK]` into an ordered list of subtasks. For each subtask record:
 
 - **goal** — one line
 - **success criterion** — a verifiable check (test passes, output matches, file exists).
-  **If `[TASK_CRITERIA]` exists** (task came from a v2 task-list block), derive success criteria
-  FROM those acceptance-criteria lines — don't invent parallel ones. The "works as expected"
-  criterion becomes the behavioral check; "test added" is already mandated by Phase 4; "no errors"
-  maps to the lint gate; "meets PRD requirement [Fn]" makes `doc/prd.md`'s feature Fn part of the
-  spec-compliance check in 5b.1.
+  **If `[TASK_CRITERIA]` exists** (task came from a v2 task-list block, or from a diagnosis
+  handoff's §9), derive success criteria FROM those lines — don't invent parallel ones. For a
+  task-list task: the "works as expected" criterion becomes the behavioral check; "test added" is
+  already mandated by Phase 4; "no errors" maps to the lint gate; "meets PRD requirement [Fn]"
+  makes `doc/prd.md`'s feature Fn part of the spec-compliance check in 5b.1.
 - **depends on** — which earlier subtasks must finish first (or `none`)
 - **independent** — `yes` if it can run in parallel with its siblings, else `no`
 - **gate set** — which CI gates apply (default: all detected; note any to skip, e.g. docs-only edit)
+
+**If `[BLAST_RADIUS]` exists** (diagnosis handoff), use it as the files-touched hint — those call
+sites are known dependents of the change and usually belong in the same subtask or an explicit
+follow-up one, not scattered.
 
 Initialize the global state object with these subtasks.
 
@@ -188,87 +222,17 @@ worker will see — it never inherits this session's history.
 
 ### 3a. Graph slice
 
-Write this script to `graphify-out/.orchestrate_slice.py` (once), then run it per subtask. It
-loads the graph exactly as graphify/forge-contextmap do (`node_link_graph(..., edges='links')`),
-finds nodes matching the subtask's key terms, then expands to their community plus a BFS
-neighborhood, and prints the touched source files + node labels + key edges.
-
-```python
-import sys, json
-from pathlib import Path
-import networkx as nx
-from networkx.readwrite import json_graph
-
-data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
-G = json_graph.node_link_graph(data, edges='links')
-
-terms = [t.lower() for t in ' '.join(sys.argv[1:]).split() if len(t) > 3]
-
-def label_of(n):
-    return G.nodes[n].get('label', str(n))
-
-# 1) seed nodes: best label-term overlap
-scored = []
-for n, d in G.nodes(data=True):
-    lab = str(d.get('label', '')).lower()
-    s = sum(1 for t in terms if t in lab)
-    if s:
-        scored.append((s, n))
-scored.sort(reverse=True)
-seeds = [n for _, n in scored[:5]]
-
-if not seeds:
-    print('NO_MATCH'); sys.exit(0)
-
-# 2) community-mates of seeds
-seed_comms = {G.nodes[n].get('community') for n in seeds if G.nodes[n].get('community') is not None}
-slice_nodes = set(seeds)
-for n, d in G.nodes(data=True):
-    if d.get('community') in seed_comms:
-        slice_nodes.add(n)
-
-# 3) BFS neighborhood (depth 2) from seeds
-frontier = set(seeds)
-for _ in range(2):
-    nxt = set()
-    for n in frontier:
-        for nb in G.neighbors(n):
-            if nb not in slice_nodes:
-                nxt.add(nb)
-    slice_nodes |= nxt
-    frontier = nxt
-
-# 4) emit
-files = sorted({G.nodes[n].get('source_file') for n in slice_nodes if G.nodes[n].get('source_file')})
-print('FILES'); [print(' ', f) for f in files]
-print('NODES'); [print(' ', label_of(n)) for n in sorted(slice_nodes, key=label_of)[:40]]
-print('EDGES')
-seen = 0
-for u, v in G.edges():
-    if u in slice_nodes and v in slice_nodes and seen < 30:
-        raw = G[u][v]; e = next(iter(raw.values()), {}) if isinstance(G, nx.MultiGraph) else raw
-        print(f"  {label_of(u)} --{e.get('relation','')} [{e.get('confidence','')}]--> {label_of(v)}")
-        seen += 1
-```
-
-Run it with the subtask goal's key words as arguments:
-```bash
-[PYTHON_CMD] graphify-out/.orchestrate_slice.py "<subtask goal key words>"
-```
-
-If it prints `NO_MATCH`, the graph has no node for these terms — fall back to the universal docs
-only (3b) and tell the worker the graph had no specific match.
-
-*Optional accelerators (not required):* graphify's own `query` / `path` / `explain` inline
-scripts (see graphify SKILL.md), or `[PYTHON_CMD] -m graphify.serve graphify-out/graph.json`
-(MCP tools `get_community`, `get_neighbors`, `shortest_path`). All read the same `graph.json`;
-the script above is the dependency-free default.
+Read `references/graph-slice.md` and follow it exactly. It writes the slice script once, runs it per
+subtask with the subtask's key terms, and returns the touched source files + node labels + key
+edges. `NO_MATCH` means the graph has no node for these terms — fall back to the universal docs only
+(3b) and tell the worker the graph had no specific match.
 
 ### 3b. Doc slice
 
 From the `FILES` the slice returned, pick the matching domain docs and ALWAYS add the universal
 docs. Read only these — never the whole `doc/` set:
 
+<!-- forge:shared-block source-doc-map -->
 - **Always:** `doc/architecture.md`, `doc/solution-structure.md`, `doc/coding-standard.md`, and
   `doc/prd.md` if it exists (small — it's the scope guard for spec compliance)
 - UI/screen/widget/view/component sources → `doc/design-brief.md` + `doc/app-flow.md`
@@ -277,9 +241,7 @@ docs. Read only these — never the whole `doc/` set:
   + `doc/backend-schema.md` if it exists
 - entity/model/enum/domain sources → `doc/domain-model.md` + `doc/backend-schema.md` if it exists
 - auth/token/permission/role sources → `doc/security.md`
-
-(Keep this source→doc mapping aligned with `/forge-contextmap`'s doc set — if contextmap renames a
-doc, update it here too.)
+<!-- /forge:shared-block source-doc-map -->
 
 ### 3c. Instruction
 
@@ -315,6 +277,13 @@ GUARD: the ladder never applies to the tests Phase 4 mandates or to any file nee
 success criterion. Those are always required — never skip them as "YAGNI."
 ```
 
+> The ladder above is `forge:shared-block minimal-ladder`, in its **payload copy**. It must stay
+> literal text here — a worker subagent sees only its dispatch payload, never this file, so it can
+> never become a pointer to somewhere else.
+
+**If `[RULED_OUT]` exists** (diagnosis handoff), append it to the payload as: "Already ruled out by
+the diagnosis — do not re-investigate: [list]."
+
 ---
 
 ## PHASE 4: Execution *(Worker = Engineer agent)*
@@ -332,28 +301,12 @@ code + write tests + run them, and do **NOT** commit. Committing happens in Phas
 
 Decide per batch of sibling subtasks:
 
-- **Worktree mode** — use when a batch has **2+ independent (parallel) subtasks** AND `[NO_COMMIT]`
-  is false. Each parallel subtask gets its own isolated checkout + sub-branch, so overlapping edits
-  can never collide in a shared index. This is the preferred path for real parallelism.
-- **Single-tree mode** — use for a lone subtask, a sequence of dependent subtasks, or whenever
-  `[NO_COMMIT]` is true (no branches → no worktrees). Workers edit the current checkout directly.
-
-#### Worktree mode (parallel batch)
-
-For each parallel subtask `i` in the batch, the MAIN session creates an isolated worktree on a
-sub-branch off `[BRANCH]`:
-
-```bash
-git worktree add ../<repo>-st<i> -b [BRANCH]/st<i> [BRANCH]
-```
-
-Then dispatch worker `i` with its payload (Phase 3) **plus** the absolute worktree path, instructing
-it: "Make ALL edits and run ALL commands under `<worktree abs path>` — that is your isolated
-checkout. Do not touch any other directory." Gates (Phase 5) run with that worktree as cwd. Workers
-in the same batch run fully in parallel with zero shared mutable state.
-
-After a worker passes its gates, its subtask is committed **on its sub-branch inside its worktree**
-(see Phase 5d), then merged back in Phase 5e.
+- **Worktree mode** — a batch has **2+ independent (parallel) subtasks** AND `[NO_COMMIT]` is false.
+  Read `references/worktree-mode.md` and follow it for dispatch, commit (5d), merge-back (5e), and
+  Phase 6 cleanup. This is the preferred path for real parallelism.
+- **Single-tree mode** — a lone subtask, a sequence of dependent subtasks, or `[NO_COMMIT]` (no
+  branches → no worktrees). Workers edit the current checkout directly. Everything you need is
+  below; do not read `worktree-mode.md`.
 
 #### Single-tree mode
 
@@ -403,12 +356,15 @@ record each result as `pass` / `fail` / `skipped (reason)`:
 
 1. **Spec compliance** — does the worker output do exactly what the subtask asked (nothing
    missing, nothing extra)? If the subtask carries a `Builds: Fn` reference, check the diff
-   against that feature's line in `doc/prd.md`.
+   against that feature's line in `doc/prd.md`. If `[FROM_DIAGNOSIS]` is true, check the diff
+   against the handoff's §7 *Proposed fix* instead — including any design choice §7 explicitly
+   left to this session.
 2. **Quality** — only after spec passes — is it well-built (tests real, no obvious smell)?
 3. **Over-engineering** *(always runs)* — an over-engineering review pass on THIS worker's diff:
    flag speculative abstractions, unrequested flexibility, reinvented stdlib/deps, and dead
    scaffolding, and hand back a **delete-list**. Review criteria = the minimal-code ladder (walk it
    top-down, stop at the first rung that applies):
+   <!-- forge:shared-block minimal-ladder -->
    1. Does this need to exist? → shouldn't (YAGNI)
    2. Already in this codebase? → should have reused it
    3. Stdlib does it? → should have used it
@@ -416,7 +372,8 @@ record each result as `pass` / `fail` / `skipped (reason)`:
    5. Installed dependency? → should have used it
    6. One line? → should be one line
    7. Only then: the minimum that works
-   **Run it from the MAIN session by default** (it can read the whole command, including the ladder).
+   <!-- /forge:shared-block minimal-ladder -->
+   **Run it from the MAIN session by default** (it can read this whole file, including the ladder).
    If you instead dispatch a read-only reviewer subagent, its payload MUST restate the ladder above
    as the review criteria — a subagent sees only its dispatch payload, not this file.
    **Scope guard — never delete-list these:** the tests Phase 4 mandates, and any file needed to
@@ -456,14 +413,7 @@ Handle worker statuses:
 **If `[NO_COMMIT]` is true, skip committing entirely** — just mark the subtask complete and leave
 its changes in the working tree.
 
-**Worktree mode** (parallel batch): commit inside the subtask's worktree, on its sub-branch. Each
-worktree is its own isolated checkout, so these commits CAN run in parallel — there is no shared
-index. Stage only the worker's reported files (never `git add -A`):
-```bash
-git -C ../<repo>-st<i> add [exact files this worker reported]
-git -C ../<repo>-st<i> commit -m "[concise subtask summary]"
-```
-Record the sub-branch + commit SHA in the subtask state. Merge-back happens in 5e.
+**Worktree mode:** follow `references/worktree-mode.md` (5d + 5e).
 
 **Single-tree mode**: the MAIN session commits, and **commits are serialized — never concurrent**:
 
@@ -485,23 +435,6 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 Record the commit SHA(s) in the subtask state. Mark the subtask complete.
 
-### 5e. Merge worktree branches back *(worktree mode only)*
-
-Once every subtask in a parallel batch has committed on its sub-branch, the MAIN session merges
-each sub-branch back into `[BRANCH]`, **one at a time** (serialized — merges share `[BRANCH]`'s
-index):
-
-```bash
-git checkout [BRANCH]
-git merge --no-ff [BRANCH]/st<i> -m "merge [BRANCH]/st<i>: [subtask summary]"
-```
-
-- **Conflict on merge** = two subtasks really did edit the same lines. This is now a *visible, real*
-  conflict (the whole point of worktrees vs. the silent single-tree collision). Resolve it, or if it
-  signals the decomposition overlapped badly, escalate to the user.
-- After all sub-branches are merged, proceed to Phase 6 cleanup (which removes the worktrees and
-  deletes the merged sub-branches).
-
 ---
 
 ## PHASE 6: Synthesis & Release *(Synthesis agent)*
@@ -512,33 +445,10 @@ When all subtasks are complete:
    `/forge-orchestrate` does **not** tag — releases/tags stay a manual step you run when you want one.
 2. Update `doc/progress.txt` with the current status.
 3. Append to `doc/changelog.txt` (`Date | Change | Description`, matching contextmap's format).
-4. Update `doc/task-list.md` if it exists — regardless of whether `[TASK]` came from the list:
-   - **v2 engineering-plan format** (`### Task N.M` blocks): find the task block that best matches
-     `[TASK]` (semantic match on the title/goal, not an exact string match). If one matches:
-     - tick its `- [ ] done` → `- [x] done`
-     - tick ONLY the acceptance-criteria boxes the gates actually verified: `test added` ← tests
-       gate passed, `no errors` ← lint gate passed, `works as expected` ← the success-criterion
-       check passed, `meets PRD requirement` ← spec-compliance (5b.1) passed. Leave anything
-       unverified unticked — never fake a check.
-   - **v1 flat format**: find the incomplete `[ ]` line that best matches `[TASK]`; tick it
-     `[ ]` → `[x]`.
-   - If nothing matches (an ad-hoc request not on the list), append under a
-     `## Completed (orchestrated)` section — create that section once if it isn't there — so the
-     master list reflects what actually shipped. In a v2 file append a minimal task block
-     (`### Task — [TASK]` + `- [x] done`); in a v1 file append `- [x] [TASK]`.
-   - Only tick or append; never rewrite, reorder, or reword existing user-authored lines.
-   - Skip silently if `doc/task-list.md` does not exist.
-5. **Generate the CD release-readiness report** — write `doc/release-readiness.md`. Map every CD
-   checklist item `/forge-orchestrate` cannot execute locally to a status/owner line, each marked
-   **"needs your CI/CD platform — not run locally."** Group them:
-   - Artifact / Docker image build, artifact repo storage
-   - Deploy to dev → staging → production
-   - E2E tests in a deployed env, cross-service integration tests
-   - Canary / blue-green, progressive rollout, traffic shifting
-   - Feature flags, automatic rollback triggers
-   - Health checks, structured logging, alerting, perf monitoring, dashboards
-   - Infrastructure-as-code, pipeline-as-code (GH Actions / Jenkinsfile)
-   - DAST, compliance / approval gates
+4. If `doc/task-list.md` exists → read `references/task-list-formats.md` and follow its *Phase 6*
+   section to tick what the gates actually verified. Skip silently if the file does not exist.
+5. **Generate the CD release-readiness report** — read `references/release-readiness.md` and write
+   `doc/release-readiness.md` as it specifies.
 6. Print the final report (under `[NO_COMMIT]`, replace the Branch/Commits block with
    `Mode: --no-commit — changes left in working tree for you to review and commit`):
    ```
@@ -566,15 +476,10 @@ When all subtasks are complete:
 
    On branch [BRANCH] — merge it when you're happy.
    ```
+   If `[FROM_DIAGNOSIS]` is true, add one line naming the source: `Fixes: doc/diagnosis-<slug>.md`.
 7. Clean up:
    - Remove `graphify-out/.orchestrate_slice.py`.
-   - **Worktree mode:** remove every worktree and delete its merged sub-branch:
-     ```bash
-     git worktree remove ../<repo>-st<i>
-     git branch -d [BRANCH]/st<i>
-     ```
-     Run `git worktree prune` to clear any stale entries. If a worktree won't remove because of
-     uncommitted leftovers, report it rather than force-removing.
+   - **Worktree mode:** follow the cleanup section of `references/worktree-mode.md`.
 
 ---
 
@@ -585,6 +490,10 @@ When all subtasks are complete:
   releases and the merge. Pass `--no-commit` to run the full pipeline with zero git writes.
 - It never rebuilds the graph and never auto-runs `/forge-contextmap`. If `graphify-out/graph.json` is
   missing it hard-stops and asks you to run `/forge-contextmap` manually.
+- **A `/forge-diagnose` handoff runs straight through** — `/forge-orchestrate doc/diagnosis-<slug>.md`
+  reads the root cause, proposed fix, verification command, blast radius, and ruled-out branches out
+  of the handoff instead of re-deriving them, and skips the ambiguity scan the diagnosis already
+  answered.
 - **Parallel batches use git worktrees** — 2+ independent subtasks each get an isolated checkout on
   a sub-branch off the feature branch, commit there in parallel, then merge back serialized. Real
   isolation: overlapping edits surface as a visible merge conflict instead of a silent index
@@ -599,3 +508,6 @@ When all subtasks are complete:
   reviewed for bloat before commit (5b.3), producing a delete-list routed through the same bounded
   loop. Tests and success-criterion files are always exempt. *Ladder adapted from ponytail
   (dietrichgebert/ponytail, MIT).*
+- **Shared blocks** — the `<!-- forge:shared-block ... -->` markers wrap text that is duplicated in
+  other forge skills on purpose (each skill installs standalone). Edit one copy, update the rest;
+  the README's *Shared blocks* table lists every location.

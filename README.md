@@ -1,6 +1,6 @@
 # ContextForge
 
-A four-command suite for Claude Code that shares one live knowledge graph: scaffold the workflow, execute features against it, sweep it for bloat, and diagnose what breaks — all reading the same map of your codebase.
+Four Claude Code skills that share one live knowledge graph: scaffold the workflow, execute features against it, sweep it for bloat, and diagnose what breaks — all reading the same map of your codebase.
 
 ```
 /forge-contextmap   → scaffold docs + build the graph   (start here)
@@ -28,51 +28,118 @@ Claude Code starts every session cold. It reads `CLAUDE.md` (auto-loaded, ~600 t
 
 ## Install
 
-`/forge-contextmap` is packaged as a **skill**: a thin `SKILL.md` router plus `references/` files
-loaded per mode (progressive disclosure — only the active mode's instructions enter context). The
-command file is a small stub that routes to the skill, so `/forge-contextmap` keeps working.
+All four are packaged as **skills** — a thin `SKILL.md` plus `references/` files loaded only on the
+branch that needs them (progressive disclosure: a single-tree run never reads the worktree
+instructions, a project with no task list never reads the tick rules).
 
-**Global** (available in all projects):
+There is **no `.claude/commands/` directory** — a skill is already a slash command. `user-invocable`
+defaults to `true`, so each one appears in the `/` menu as `/forge-<name>`. The `description` also
+lets Claude reach for it on intent: "sweep this repo for dead code" gets you `/forge-audit` without
+typing the slash.
 
-```bash
-git clone --depth 1 https://github.com/yusheanfong/contextforge /tmp/contextforge
-mkdir -p ~/.claude/skills ~/.claude/commands
-cp -R /tmp/contextforge/.claude/skills/forge-contextmap ~/.claude/skills/
-cp /tmp/contextforge/.claude/commands/forge-contextmap.md ~/.claude/commands/
-rm -rf /tmp/contextforge
-```
+### Install everything (recommended)
 
-**Project-level** (this project only):
+**Global** — available in all projects:
 
 ```bash
 git clone --depth 1 https://github.com/yusheanfong/contextforge /tmp/contextforge
-mkdir -p .claude/skills .claude/commands
-cp -R /tmp/contextforge/.claude/skills/forge-contextmap .claude/skills/
-cp /tmp/contextforge/.claude/commands/forge-contextmap.md .claude/commands/
+mkdir -p ~/.claude/skills
+cp -R /tmp/contextforge/.claude/skills/. ~/.claude/skills/
 rm -rf /tmp/contextforge
 ```
 
-**For existing project analysis**, you also need Python 3.10+. `/forge-contextmap` installs Graphify automatically when it needs it.
+**Project-level** — this project only:
+
+```bash
+git clone --depth 1 https://github.com/yusheanfong/contextforge /tmp/contextforge
+mkdir -p .claude/skills
+cp -R /tmp/contextforge/.claude/skills/. .claude/skills/
+rm -rf /tmp/contextforge
+```
+
+> Pick one or the other. For skills, **personal (`~/.claude/skills/`) overrides project
+> (`.claude/skills/`)** when both define the same name — the reverse of how `settings.json`
+> precedence works. Install globally *or* per-project, not both, or the project copy is dead weight.
+
+### Install one only
+
+Supported — every shared block is duplicated inside each skill dir precisely so one skill works
+standalone (see [Shared blocks](#shared-blocks)):
+
+```bash
+git clone --depth 1 https://github.com/yusheanfong/contextforge /tmp/contextforge
+mkdir -p ~/.claude/skills
+cp -R /tmp/contextforge/.claude/skills/forge-orchestrate ~/.claude/skills/
+rm -rf /tmp/contextforge
+```
+
+Start with **`forge-contextmap`** regardless — `/forge-orchestrate` and `/forge-audit` hard-stop
+without the graph it builds.
+
+### Updating
+
+Re-run the install block; `cp -R` overwrites in place.
+
+> **Upgrading from a pre-skill install?** Older versions shipped `/forge-orchestrate` and
+> `/forge-audit` as single files in `~/.claude/commands/`. Skills take precedence over same-named
+> commands, so those files are inert rather than harmful — but they're stale and confusing. Clear
+> them out: `rm -f ~/.claude/commands/forge-*.md`
+
+### Uninstall
+
+```bash
+rm -rf ~/.claude/skills/forge-*
+rm -f ~/.claude/commands/forge-*.md   # only if you ever used a pre-skill install
+```
+
+### Requirements
+
+- Claude Code (any version)
+- Python 3.10+ — for existing-project analysis, `/forge-contextmap sync`, `/forge-orchestrate`, and
+  `/forge-audit` (all read the graph). **Not** required for new-project scaffolding.
+  `/forge-contextmap` installs Graphify automatically when it needs it.
 
 ---
 
 ## Pipeline — Which Command When
 
-The four commands share one graph and run in a loop:
+The four skills share one graph and run in a loop:
 
 ```
-Setup (once)         /forge-contextmap                → scaffold docs + build graph + post-commit hook
-Per feature          /forge-orchestrate <feature>     → branch + graph-scoped agents + CI gates + commits
-                     → review the diff → merge the branch
-                     /forge-contextmap sync           → refresh the <!-- graphify:auto --> doc fences
-When something breaks /forge-diagnose <issue>         → root cause (no code changes) + handoff prompt
-Periodic / on-demand /forge-audit                     → whole-repo bloat sweep (read-only)
+Setup (once)          /forge-contextmap                   → scaffold docs + build graph + post-commit hook
+                      then read doc/task-list.md          → your build order, phase by phase
+
+Per task (the loop)   /forge-orchestrate                  → no args: takes the next eligible task off
+                                                            the plan and uses ITS acceptance criteria
+                      → review the diff → merge the branch
+                      /forge-contextmap sync              → refresh doc fences + print the bloat signal
+
+Ad-hoc work           /forge-orchestrate <feature>        → same pipeline, spec typed by you
+
+When something breaks /forge-diagnose <issue>             → root cause (no code changes) + handoff file
+                      /forge-orchestrate doc/diagnosis-*  → execute that handoff, ambiguity scan skipped
+
+Periodic / on-demand  /forge-audit                        → whole-repo bloat sweep (read-only)
 ```
+
+**Bare `/forge-orchestrate` is the normal way to run it.** With no arguments it reads
+`doc/task-list.md`, picks the first unchecked `### Task N.M` whose `Depends on` are all done, and
+uses that task's own acceptance criteria as its success criteria — you don't retype the spec, and
+the plan stays the single source of truth for what's next. Type a description only for work that
+isn't on the plan.
 
 **Sync comes *after* `/forge-orchestrate`, not before.** `/forge-orchestrate` updates `progress.txt`,
 `changelog.txt`, and `task-list.md` — but it does **not** refresh the `graphify:auto` doc fences.
 The post-commit hook rebuilds `graph.json` on every commit yet never writes docs. So run
 `/forge-contextmap sync` after merging to pull the fresh graph into your docs.
+
+**Diagnosis feeds execution directly.** `/forge-diagnose` writes `doc/diagnosis-<slug>.md`; pass
+that *path* to `/forge-orchestrate` and it lifts the proposed fix, verification commands, blast
+radius, and ruled-out branches straight out of the file rather than re-deriving them.
+
+**Sync surfaces the audit trigger.** Since sync already has the graph loaded, it prints orphan /
+duplicate-label / god-node counts. Those are pointers, not findings — `/forge-audit` is what
+confirms them against real source.
 
 | Command | Use it when | Writes | Git |
 |---------|-------------|--------|-----|
@@ -84,6 +151,39 @@ The post-commit hook rebuilds `graph.json` on every commit yet never writes docs
 **`/forge-audit` vs `/forge-orchestrate`'s built-in review:** `/forge-orchestrate` reviews a *single fresh diff* at
 commit time (its over-engineering gate). `/forge-audit` sweeps *already-landed* code across the whole repo.
 Reach for `/forge-audit` on-demand when cruft has piled up.
+
+### Flags
+
+| Flag | Command | Effect |
+|---|---|---|
+| `--no-commit` | `/forge-orchestrate` | Full pipeline and every gate, **zero git writes** — no branch, no commits, changes left in the working tree for you. Also forces single-tree dispatch (no branches → no worktrees) |
+| `--new` | `/forge-contextmap` | Force the new-project interview even when source files exist |
+| `--graph-only` | `/forge-audit` | Skip source confirmation — faster, less precise, every finding tagged `[unconfirmed]` |
+
+`/forge-contextmap sync` is a subcommand, not a flag. `/forge-audit` also takes a bare path prefix
+(`/forge-audit src/checkout`) to scope the sweep.
+
+### When it stops vs. runs hands-off
+
+The pipeline is autonomous by design — it prints its decomposition and keeps going rather than
+asking for approval at every step. It interrupts you in exactly these cases:
+
+- **No `graphify-out/graph.json`** — `/forge-orchestrate` and `/forge-audit` hard-stop and tell you
+  to run `/forge-contextmap`. They never auto-run it, and never rebuild the graph themselves.
+  `/forge-diagnose` doesn't stop — it greps instead.
+- **Genuinely ambiguous request** — unclear scope, missing acceptance criteria, or unclear affected
+  area gets a real question with options. A *clear* request gets a one-line stated assumption and no
+  question. Skipped entirely when the task came from a diagnosis handoff.
+- **Dirty working tree** — asks before branching: stash or abort. It will never silently discard or
+  commit your pending work.
+- **Secret found in the diff** — hard block. No commit, no retry loop (retrying can't un-leak a
+  secret), exact match location surfaced, waits for you.
+- **No test runner detected** — warns loudly and asks once, because the success criterion can't be
+  verified. Records `unverified — no test tooling` in the results either way. Never a fake green.
+- **A gate fails 3×** — stops and reports. Bounded loop, never infinite.
+
+And two things it never does, regardless: **tag a release**, or **merge to `main`**. It leaves you
+on the feature branch. You own the merge.
 
 ---
 
@@ -203,14 +303,8 @@ all gates with zero git writes — changes are left in the working tree for you 
 yourself. `/forge-orchestrate` never rebuilds the graph (that's `/forge-contextmap sync` or the post-commit
 hook), so commit or sync first if you have uncommitted structural changes.
 
-**Install** (alongside contextmap):
-
-```bash
-curl -o ~/.claude/commands/forge-orchestrate.md \
-  https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/forge-orchestrate.md
-```
-
 Requires Python 3.10+ (to read the graph) and a project that has already run `/forge-contextmap`.
+See [Install](#install).
 
 ---
 
@@ -237,14 +331,8 @@ Flow:
 Pass **`--graph-only`** to skip source confirmation (faster, less precise) — every finding is then
 tagged `[unconfirmed]`. Tests and files needed for current behavior are never delete-listed.
 
-**Install** (alongside contextmap):
-
-```bash
-curl -o ~/.claude/commands/forge-audit.md \
-  https://raw.githubusercontent.com/yusheanfong/contextforge/main/.claude/commands/forge-audit.md
-```
-
 Requires Python 3.10+ (to read the graph) and a project that has already run `/forge-contextmap`.
+See [Install](#install).
 
 ---
 
@@ -274,7 +362,21 @@ Flow:
 The handoff carries the root cause with `path` → `symbol` evidence, the reproduction command, the
 ruled-out branches ("do not re-investigate these"), the proposed fix, blast radius, and the
 verification test. Locations are anchored on symbol names, not line numbers, so they survive the
-drift between sessions. Then: `/forge-orchestrate` it, or apply it directly.
+drift between sessions.
+
+**Then hand it straight to the pipeline:**
+
+```
+/forge-orchestrate doc/diagnosis-<slug>.md
+```
+
+Pass the *path*, not a re-typed description. Orchestrate reads the handoff's proposed fix as the
+task, its verification commands as the success criterion, its blast radius as the files-touched
+hint, and its ruled-out branches as "do not re-investigate" — then **skips its own ambiguity scan**,
+because the diagnosis already answered it. It branches as `fix/<slug>` instead of `feature/<slug>`.
+Re-typing the task instead throws every one of those away.
+
+For a one-file surgical fix, apply the handoff's §7 directly and run its §9 — no pipeline needed.
 
 **"Never changes code" is a contract, not a sandbox.** `Edit` is left out of `allowed-tools`, but
 the handoff has to be written, so `Write` is present — the guarantee that nothing but
@@ -283,15 +385,7 @@ the handoff has to be written, so `Write` is present — the guarantee that noth
 Unlike `/forge-orchestrate` and `/forge-audit`, it does **not** require the graph — it uses it when
 present and greps when not.
 
-**Install** — packaged as a skill, same as `/forge-contextmap`:
-
-```bash
-git clone --depth 1 https://github.com/yusheanfong/contextforge /tmp/contextforge
-mkdir -p ~/.claude/skills ~/.claude/commands
-cp -R /tmp/contextforge/.claude/skills/forge-diagnose ~/.claude/skills/
-cp /tmp/contextforge/.claude/commands/forge-diagnose.md ~/.claude/commands/
-rm -rf /tmp/contextforge
-```
+See [Install](#install).
 
 ---
 
@@ -449,10 +543,42 @@ Session N+1: fresh session → same auto-load → continue from progress.txt
 
 ---
 
-## Requirements
+## Shared blocks
 
-- Claude Code (any version)
-- Python 3.10+ — needed for existing-project analysis, `/forge-contextmap sync`, and both `/forge-orchestrate` and `/forge-audit` (they read the graph). Not required for new-project scaffolding.
+*(Maintainers only. Requirements moved up to [Install](#install).)*
+
+Each skill installs standalone, so a skill can never read a file from a sibling skill's directory —
+that would dangle for anyone who installed only one. A handful of blocks are therefore **duplicated
+on purpose**, each wrapped in `<!-- forge:shared-block <name> -->` (or `# forge:shared-block <name>`
+inside Python). Edit one copy, update the rest:
+
+| Block | Copies |
+|---|---|
+| `graph-hard-stop` | `skills/forge-orchestrate/SKILL.md` 0a · `skills/forge-audit/SKILL.md` 0b |
+| `python-cmd` | `skills/forge-orchestrate/SKILL.md` 0b · `skills/forge-audit/SKILL.md` 0c |
+| `graph-loader` | `skills/forge-orchestrate/references/graph-slice.md` · `skills/forge-audit/SKILL.md` Phase 1 · `skills/forge-contextmap/references/sync.md` S3.6 |
+| `bloat-buckets` | `skills/forge-audit/SKILL.md` Phase 1 · `skills/forge-contextmap/references/sync.md` S3.6 — thresholds must match, or sync's counts disagree with audit's |
+| `minimal-ladder` | `skills/forge-orchestrate/SKILL.md` 3c (**payload copy**) · same file 5b.3 (review copy) · `skills/forge-audit/SKILL.md` Phase 2 |
+| `source-doc-map` | `skills/forge-orchestrate/SKILL.md` 3b · `skills/forge-contextmap/references/doc-templates.md` CLAUDE.md rule 1 |
+
+Two constraints that are not negotiable:
+
+- **The `minimal-ladder` payload copy in orchestrate 3c must stay literal text.** It is injected into
+  worker subagent prompts, and a subagent sees only its dispatch payload — never the skill file. A
+  pointer there would silently ship workers with no ladder.
+- **The `source-doc-map` marker in `doc-templates.md` sits *outside* the template fence.** Everything
+  inside that fence is copied verbatim into the user's generated `CLAUDE.md`; a marker in there
+  would leak into every scaffolded project.
+
+Verify after editing any of them:
+
+```bash
+grep -rn "forge:shared-block" .claude          # every marker — copies come in pairs
+grep -rn "\.\./[a-z-]*/references" .claude     # must be empty — no cross-skill reads
+```
+
+(A bare `../` search is useless here: `worktree-mode.md` legitimately contains `../<repo>-st<i>`
+sibling checkout paths.)
 
 ---
 

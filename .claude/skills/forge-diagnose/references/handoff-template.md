@@ -102,6 +102,10 @@ Other code touching what section 7 changes:
 
 ## 10. Execute with
 
-- Multi-file fix or one that needs CI gates and commits → `/forge-orchestrate [task description]`
+- Multi-file fix or one that needs CI gates and commits →
+  **`/forge-orchestrate doc/diagnosis-<slug>.md`** — pass this file's path, not a re-typed
+  description. Orchestrate reads §7 as the task, §9 as the success criterion, §8 as the
+  files-touched hint, and §5/§6 as "do not re-investigate," then skips its ambiguity scan because
+  this diagnosis already answered it. Re-typing the task throws all of that away.
 - One-file surgical fix → apply section 7 directly, then run section 9
 ````

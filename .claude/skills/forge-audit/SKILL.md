@@ -1,3 +1,10 @@
+---
+name: forge-audit
+description: Repo-wide over-engineering audit (/forge-audit). Use when sweeping already-landed code for accumulated bloat — dead/orphan nodes, duplicate implementations, god nodes — and handing back a grouped delete/simplify list. Report-only, never edits. Triggers include "/forge-audit", "audit for over-engineering", "find dead code", "sweep the repo for bloat", "what can we delete".
+argument-hint: "[path] [--graph-only]"
+allowed-tools: Read, Grep, Glob, Bash
+---
+
 # /forge-audit — Repo-Wide Over-Engineering Audit
 
 Sweep the ENTIRE codebase (or a scoped path) for already-accumulated bloat and hand back a grouped
@@ -25,6 +32,7 @@ Review criteria = the **minimal-code ladder** (walk top-down, stop at the first 
 
 ### 0b. Graph prerequisite — hard-stop
 
+<!-- forge:shared-block graph-hard-stop -->
 `/forge-audit` is graph-driven. Use the Read tool (or a file check) for `graphify-out/graph.json` in the
 current directory.
 
@@ -35,9 +43,11 @@ If it does NOT exist, print this exact message and STOP — do nothing else (do 
 ❌ /forge-audit is graph-driven and needs graphify-out/graph.json.
 Run /forge-contextmap first to build the knowledge graph, then re-run /forge-audit.
 ```
+<!-- /forge:shared-block graph-hard-stop -->
 
 ### 0c. Resolve the Python interpreter as `[PYTHON_CMD]`
 
+<!-- forge:shared-block python-cmd -->
 1. If `graphify-out/.graphify_python` exists, read it — that one line is the interpreter path
    graphify already validated (uv/pipx/venv-aware). Use it verbatim as `[PYTHON_CMD]`.
 2. Otherwise, detect with the Bash tool:
@@ -49,6 +59,7 @@ Run /forge-contextmap first to build the knowledge graph, then re-run /forge-aud
    ❌ /forge-audit needs Python 3.10+ to read the graph. Install it, then re-run.
    ```
    and STOP.
+<!-- /forge:shared-block python-cmd -->
 
 ---
 
@@ -69,6 +80,7 @@ from networkx.readwrite import json_graph
 
 scope = (sys.argv[1] if len(sys.argv) > 1 else "").replace("\\", "/").strip("/")
 
+# forge:shared-block graph-loader
 data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
 G = json_graph.node_link_graph(data, edges='links')
 
@@ -78,6 +90,7 @@ def label_of(n):
 def src_of(n):
     s = G.nodes[n].get('source_file')
     return s.replace("\\", "/") if s else None
+# /forge:shared-block graph-loader
 
 def in_scope(n):
     s = src_of(n)
@@ -89,15 +102,18 @@ nodes = [n for n in G.nodes() if in_scope(n)]
 if not nodes:
     print("SCOPE_EMPTY"); sys.exit(0)
 
+# forge:shared-block bloat-buckets
 # --- bucket 1: orphans / near-dead (degree <= 1) -> rung 1
 orphans = sorted(
     [(label_of(n), src_of(n), G.degree(n)) for n in nodes if G.degree(n) <= 1],
     key=lambda t: (t[1] or "", t[0]),
 )
-print("ORPHANS")
+print(f"ORPHANS (total={len(orphans)})")
 if orphans:
     for lab, src, deg in orphans[:40]:
         print(f"  {lab} | {src} | degree={deg}")
+    if len(orphans) > 40:
+        print(f"  ... {len(orphans) - 40} more not shown")
 else:
     print("  NO_SIGNAL")
 
@@ -109,10 +125,12 @@ dups = sorted(
     [(lab, sorted(srcs)) for lab, srcs in by_label.items() if len(srcs) > 1],
     key=lambda t: (-len(t[1]), t[0]),
 )
-print("DUPLICATES")
+print(f"DUPLICATES (total={len(dups)})")
 if dups:
     for lab, srcs in dups[:30]:
         print(f"  {lab} | in {len(srcs)} files: {', '.join(s for s in srcs if s)}")
+    if len(dups) > 30:
+        print(f"  ... {len(dups) - 30} more not shown")
 else:
     print("  NO_SIGNAL")
 
@@ -124,10 +142,13 @@ gods = sorted(
     [(label_of(n), src_of(n), G.degree(n)) for n in nodes if G.degree(n) >= cut],
     key=lambda t: -t[2],
 )
-print(f"GODNODES (degree>={cut}, median={med})")
+# /forge:shared-block bloat-buckets
+print(f"GODNODES (total={len(gods)}, degree>={cut}, median={med})")
 if gods:
     for lab, src, deg in gods[:15]:
         print(f"  {lab} | {src} | degree={deg}")
+    if len(gods) > 15:
+        print(f"  ... {len(gods) - 15} more not shown")
 else:
     print("  NO_SIGNAL")
 PY
@@ -154,6 +175,7 @@ Otherwise, for each candidate, open its live `source_file` (Read tool) and confi
 against the actual code before flagging it. Walk the ladder top-down, stop at the first rung that
 applies:
 
+<!-- forge:shared-block minimal-ladder -->
 1. **Does this need to exist?** → no ⇒ **delete** (YAGNI / dead code)
 2. **Already in this codebase?** → ⇒ **reuse it** (duplication — inline/collapse to the original)
 3. **Stdlib does it?** → ⇒ **replace-with-stdlib**
@@ -162,6 +184,7 @@ applies:
 6. **One line?** → ⇒ **inline**
 7. **Only then:** the minimum that works — flag speculative abstraction, unrequested flexibility,
    dead scaffolding ⇒ **simplify**
+<!-- /forge:shared-block minimal-ladder -->
 
 Drop any candidate the source proves legitimate. A graph orphan that is a real public entry point, a
 duplicate label that is genuinely two different things, a god node that is a legitimately central
@@ -210,7 +233,9 @@ result, not a prompt to manufacture findings.
 ## HARD GUARDS
 
 - **Read-only.** No source edits, no git writes, **no files written at all** — the scan is an inline
-  heredoc that persists nothing.
+  heredoc that persists nothing. `Write` and `Edit` are omitted from this skill's `allowed-tools`,
+  so read-only is structural here, not just a promise (contrast `/forge-diagnose`, which must keep
+  `Write` to emit its handoff and enforces the limit behaviorally).
 - **Never delete-list:** tests, or any file needed for current behavior / success criteria.
   Minimality never overrides working functionality — flag genuine bloat, not "code I'd have written
   differently."

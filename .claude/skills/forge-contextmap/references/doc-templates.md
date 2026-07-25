@@ -6,6 +6,11 @@ PROJECT and MIGRATION modes. Conditional rules: `design-brief.md` only if `[HAS_
 
 **File 1: `CLAUDE.md`**
 
+<!-- forge:shared-block source-doc-map — Rule 1's task→doc routing below mirrors
+     forge-orchestrate/SKILL.md 3b. Keep both in sync. The marker lives outside the template fence
+     on purpose: anything inside the fence is copied verbatim into the user's CLAUDE.md. -->
+
+
 ```
 # Project Context
 <!-- contextforge:format v2 -->
