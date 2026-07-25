@@ -2,7 +2,7 @@
 name: forge-audit
 description: Repo-wide over-engineering audit (/forge-audit). Use when sweeping already-landed code for accumulated bloat — dead/orphan nodes, duplicate implementations, god nodes — and handing back a grouped delete/simplify list. Report-only, never edits. Triggers include "/forge-audit", "audit for over-engineering", "find dead code", "sweep the repo for bloat", "what can we delete".
 argument-hint: "[path] [--graph-only]"
-allowed-tools: Read, Grep, Glob, Bash
+allowed-tools: Read, Grep, Glob, Bash, Write
 ---
 
 # /forge-audit — Repo-Wide Over-Engineering Audit
@@ -50,28 +50,40 @@ Run /forge-contextmap first to build the knowledge graph, then re-run /forge-aud
 <!-- forge:shared-block python-cmd -->
 1. If `graphify-out/.graphify_python` exists, read it — that one line is the interpreter path
    graphify already validated (uv/pipx/venv-aware). Use it verbatim as `[PYTHON_CMD]`.
-2. Otherwise, detect with the Bash tool:
+2. Otherwise, detect with the Bash tool. Run these as **two separate calls** — `||` is not available
+   in PowerShell 5.1, and the first one that succeeds wins:
    ```bash
-   python --version 2>&1 || python3 --version 2>&1
+   python --version
    ```
-   Use whichever of `python` / `python3` works and is ≥ 3.10. If neither is ≥ 3.10, print:
+   ```bash
+   python3 --version
+   ```
+   Use whichever works and is ≥ 3.10. If neither is ≥ 3.10, print:
    ```
    ❌ /forge-audit needs Python 3.10+ to read the graph. Install it, then re-run.
    ```
    and STOP.
+3. Confirm the graph libraries import — the Phase 1 scan needs them:
+   ```bash
+   [PYTHON_CMD] -c "import networkx, json"
+   ```
+   If this fails, `[PYTHON_CMD]` is the wrong interpreter (a common uv/pipx symptom: graphify lives
+   in its own venv while bare `python3` does not have `networkx`). Re-check step 1 for
+   `graphify-out/.graphify_python` before falling back, and tell the user which interpreter you used.
 <!-- /forge:shared-block python-cmd -->
 
 ---
 
 ## PHASE 1: Graph Scan *(candidates only — the graph points, it never decides)*
 
-Run the scan **inline via the Bash tool** — no file is written anywhere (single-pass + read-only, so
-nothing is persisted to disk). Pass `[SCOPE]` as the one argument; empty string means whole repo.
-The script loads the graph exactly as graphify/forge-contextmap do (`node_link_graph(..., edges='links')`)
-and emits three candidate buckets.
+Write the scan to `graphify-out/.forge_audit_scan.py` with the **Write tool**, run it, then delete
+it. (A heredoc would be shorter but does not exist in PowerShell or cmd — this skill must run on
+Windows too. Same pattern `/forge-orchestrate` uses for `.orchestrate_slice.py`.) Pass `[SCOPE]` as
+the one argument; empty string means whole repo. The script loads the graph exactly as
+graphify/forge-contextmap do (`node_link_graph(..., edges='links')`) and emits three candidate
+buckets.
 
-```bash
-[PYTHON_CMD] - "[SCOPE]" <<'PY'
+```python
 import sys, json
 from collections import defaultdict
 from pathlib import Path
@@ -151,8 +163,13 @@ if gods:
         print(f"  ... {len(gods) - 15} more not shown")
 else:
     print("  NO_SIGNAL")
-PY
 ```
+
+```bash
+[PYTHON_CMD] graphify-out/.forge_audit_scan.py "[SCOPE]"
+```
+
+Delete `graphify-out/.forge_audit_scan.py` once the scan output is read.
 
 - **ORPHANS** (`degree <= 1`) → candidates for **rung 1** (YAGNI / dead code).
 - **DUPLICATES** (same label across different files) → candidates for **rung 2** (should have reused).
@@ -232,10 +249,13 @@ result, not a prompt to manufacture findings.
 
 ## HARD GUARDS
 
-- **Read-only.** No source edits, no git writes, **no files written at all** — the scan is an inline
-  heredoc that persists nothing. `Write` and `Edit` are omitted from this skill's `allowed-tools`,
-  so read-only is structural here, not just a promise (contrast `/forge-diagnose`, which must keep
-  `Write` to emit its handoff and enforces the limit behaviorally).
+- **Read-only with respect to your code.** No source edits, no git writes, no report file. `Edit` is
+  omitted from `allowed-tools`, so no existing file can be modified. `Write` is present for exactly
+  one purpose — emitting `graphify-out/.forge_audit_scan.py`, which is deleted once its output is
+  read. Writing the scan to a file instead of piping a heredoc is what makes this skill run on
+  Windows; `/forge-orchestrate` uses the same pattern for `.orchestrate_slice.py`. **Never use
+  `Write` for anything else here** — no report, no findings file, no scratch notes. The guarantee
+  that matters is unchanged: `/forge-audit` never touches a byte of your source or your git history.
 - **Never delete-list:** tests, or any file needed for current behavior / success criteria.
   Minimality never overrides working functionality — flag genuine bloat, not "code I'd have written
   differently."
@@ -249,7 +269,8 @@ result, not a prompt to manufacture findings.
 1. With no `graphify-out/graph.json` present, Phase 0b prints the exact hard-stop message and halts.
 2. With a graph present, the run produces a grouped list with a per-finding rung + rationale, and
    never flags a test file.
-3. Zero edits and zero commits were made (read-only confirmed) — including no scan file left on disk.
+3. Zero source edits and zero commits were made — and `graphify-out/.forge_audit_scan.py` was
+   deleted, so no scan file is left on disk.
 
 ---
 

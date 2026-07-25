@@ -96,6 +96,23 @@ verbatim in the v2 version.
   File 1), keeping the conditional lines consistent with `[HAS_UI]`/`[HAS_BACKEND]`.
 - Keep `## Goal`, `## Tech Stack`, `## Key Architecture`, `## Graph Sync`, `## Coding Rules`, and
   ANY sections the user added themselves — preserved verbatim, untouched.
+- **`## Key Architecture` needs one structural fix.** v1 put hand-written architecture prose inside
+  the `project:claude-summary` fence, where sync destroys it on the next run (see
+  `references/fence-format.md`). While preserving the content verbatim, **split it**: graph-derived
+  facts (god nodes, communities, entry points) stay inside the fence; every hand-written line moves
+  below the `end` marker under a new `### Notes` heading. Not a rewrite — the same lines, relocated.
+  Show the user the split before writing, and name it in the M8 report:
+  ```
+  ## Key Architecture (from Graphify)
+  <!-- graphify:auto start:project:claude-summary -->
+  **God nodes**: ...
+  **Communities**: ...
+  **Entry points**: ...
+  <!-- graphify:auto end:project:claude-summary -->
+
+  ### Notes
+  [the user's original prose, verbatim]
+  ```
 
 ### Step M8: Report
 

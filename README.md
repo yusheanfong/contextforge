@@ -213,7 +213,8 @@ In a project with source code (auto-detected):
 Flow:
 1. Checks Python ≥ 3.10 (fails with clear instructions if missing)
 2. Installs Graphify if not present: `pip install graphifyy`
-3. Runs `python -m graphify .` on your codebase
+3. Probes the installed graphify CLI once (caching it to `graphify-out/.graphify_cli`), then runs it on your codebase
+   - The CLI is verb-based (`graphify update .`) and its flags differ across versions, so the invocation is resolved at runtime, never hardcoded
 4. Reads the knowledge graph and presents a structured understanding:
    - Architecture pattern
    - Key components (god nodes — highest-degree concepts)
@@ -225,6 +226,23 @@ Flow:
 6. If UI code is detected: extracts your existing theme/tokens (or asks the vibe question) → concrete design brief
 7. Applies your corrections, then populates all doc files (backend schema included when backend code is detected)
 8. Installs the post-commit hook
+
+#### Scope the corpus first: `.graphifyignore`
+
+Graphify honors a `.graphifyignore` at the repo root, gitignore syntax. Vendored code, generated
+bridges, build output, and platform scaffolding otherwise become graph nodes — they inflate every
+doc fence and swamp the sync diff with churn unrelated to your source.
+
+```
+gauge_reader_bridge/
+.android/
+build/
+node_modules/
+Pods/
+```
+
+Cheaper to exclude up front than to prune afterwards. `/forge-contextmap` checks for this file
+before the first build and proposes entries if it is missing.
 
 #### Migration (old-format projects)
 
@@ -504,7 +522,9 @@ Overwritten on every /forge-contextmap sync.
 
 ### The post-commit hook
 
-`.git/hooks/post-commit` runs `python -m graphify . --update` silently in the background after every commit. This keeps `graphify-out/graph.json` current without blocking your workflow.
+`.git/hooks/post-commit` runs `graphify update .` in the background after every commit. This keeps `graphify-out/graph.json` current without blocking your workflow.
+
+Output goes to **`graphify-out/.hook.log`**, not `/dev/null`. If the graph ever looks stale, that log is the first place to look — an earlier version of this hook discarded stderr, so when its command was wrong the graph silently stopped updating and nothing said so.
 
 The hook only rebuilds the graph — it never writes to doc files. Run `/forge-contextmap sync` explicitly when you want docs refreshed.
 
@@ -512,7 +532,7 @@ The hook only rebuilds the graph — it never writes to doc files. Run `/forge-c
 
 ```
 You write code → git commit
-  └─→ post-commit hook: graphify --update (background, silent)
+  └─→ post-commit hook: graphify update . (background, logged to graphify-out/.hook.log)
 
 /forge-contextmap sync
   └─→ reads updated graph.json
@@ -561,7 +581,8 @@ inside Python). Edit one copy, update the rest:
 | Block | Copies |
 |---|---|
 | `graph-hard-stop` | `skills/forge-orchestrate/SKILL.md` 0a · `skills/forge-audit/SKILL.md` 0b |
-| `python-cmd` | `skills/forge-orchestrate/SKILL.md` 0b · `skills/forge-audit/SKILL.md` 0c |
+| `python-cmd` | `skills/forge-orchestrate/SKILL.md` 0b · `skills/forge-audit/SKILL.md` 0c · `skills/forge-contextmap/references/sync.md` S1 |
+| `graphify-cli` | `skills/forge-contextmap/references/sync.md` S1.5 — **one copy, not duplicated.** Both consumers live in `forge-contextmap`, so `references/existing-project.md` E2.5 just points at it. Listed here because a second skill needing the CLI must copy it rather than reach across directories. |
 | `graph-loader` | `skills/forge-orchestrate/references/graph-slice.md` · `skills/forge-audit/SKILL.md` Phase 1 · `skills/forge-contextmap/references/sync.md` S3.6 |
 | `bloat-buckets` | `skills/forge-audit/SKILL.md` Phase 1 · `skills/forge-contextmap/references/sync.md` S3.6 — thresholds must match, or sync's counts disagree with audit's |
 | `minimal-ladder` | `skills/forge-orchestrate/SKILL.md` 3c (**payload copy**) · same file 5b.3 (review copy) · `skills/forge-audit/SKILL.md` Phase 2 |

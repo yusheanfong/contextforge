@@ -2,23 +2,184 @@
 
 *Trigger: `graphify-out/graph.json` exists, or `sync` argument*
 
-### Step S1: Python Check
+> **Portability contract.** Every command in this file must run identically on macOS, Linux, and
+> Windows. That means: **no heredocs, no `cp`/`mv`/`rm`, no `mkdir -p`/`chmod`, no `2>/dev/null`, no
+> `||` chaining.** Multi-line Python goes into a file written with the **Write tool** and is run as
+> `[PYTHON_CMD] <script>.py`; file copies use the **Read + Write tools**. The only shell commands
+> left are `git …`, `graphify …`, and `[PYTHON_CMD] <script>.py`.
 
-Same as Step E1 in `references/existing-project.md`. Detect `[PYTHON_CMD]`.
+### Step S1: Resolve the Python Interpreter
+
+<!-- forge:shared-block python-cmd -->
+1. If `graphify-out/.graphify_python` exists, read it — that one line is the interpreter path
+   graphify already validated (uv/pipx/venv-aware). Use it verbatim as `[PYTHON_CMD]`.
+2. Otherwise, detect with the Bash tool. Run these as **two separate calls** — `||` is not available
+   in PowerShell 5.1, and the first one that succeeds wins:
+   ```bash
+   python --version
+   ```
+   ```bash
+   python3 --version
+   ```
+   Use whichever works and is ≥ 3.10. If neither is ≥ 3.10, print:
+   ```
+   ❌ /forge-contextmap needs Python 3.10+ to read the graph. Install it, then re-run.
+   ```
+   and STOP.
+3. Confirm the graph libraries import — every later step in this file runs a script that needs them:
+   ```bash
+   [PYTHON_CMD] -c "import networkx, json"
+   ```
+   If this fails, `[PYTHON_CMD]` is the wrong interpreter (a common uv/pipx symptom: graphify lives
+   in its own venv while bare `python3` does not have `networkx`). Re-check step 1 for
+   `graphify-out/.graphify_python` before falling back, and tell the user which interpreter you used.
+<!-- /forge:shared-block python-cmd -->
+
+### Step S1.5: Resolve the Graphify CLI
+
+<!-- forge:shared-block graphify-cli -->
+Graphify's CLI is **verb-based** (`graphify update <path>`), and its flags have changed across
+versions. Never hardcode an invocation — resolve it once, then reuse.
+
+1. If `graphify-out/.graphify_cli` exists, read it and skip to step 5. It has two lines:
+   ```
+   build=<command>
+   update=<command>
+   ```
+2. Probe the console script:
+   ```bash
+   graphify --version
+   ```
+   If the command is not found, fall back to `[PYTHON_CMD] -m graphify --version`. If **neither**
+   resolves, graphify is not installed — print the install guidance from
+   `references/existing-project.md` Step E2 and STOP. Call whichever worked `[GRAPHIFY]`.
+3. Probe the update subcommand for a shrink-override flag:
+   ```bash
+   graphify update --help
+   ```
+   `graphify update` is incremental and, on some versions, **refuses to overwrite `graph.json` when
+   the rebuild has fewer nodes than the existing graph.** Look in the help output for a flag that
+   overrides that — `--force`, `--overwrite`, `--allow-shrink`, or similar wording. Use whichever
+   name the help output actually shows. If no such flag exists, record none — do **not** invent one.
+4. Write `graphify-out/.graphify_cli` with the **Write tool** (create `graphify-out/` first if the
+   directory does not exist — in EXISTING PROJECT MODE it will not until graphify's first run):
+   ```
+   build=[GRAPHIFY] .
+   update=[GRAPHIFY] update . <force-flag if the probe found one>
+   ```
+5. Use those two commands verbatim wherever this skill needs to build or update the graph.
+
+*Why probe instead of hardcode:* `python -m graphify . --update` — the invocation this skill used to
+ship — matches no released graphify CLI. It fails, or silently does nothing when backgrounded.
+<!-- /forge:shared-block graphify-cli -->
 
 ### Step S2: Rebuild Graph
 
-Run incremental graph update:
-```bash
-[PYTHON_CMD] -m graphify . --update
+Run the `update=` command resolved in S1.5. Wait for completion and read its output — graphify's
+update path reports its own pruning, e.g. `Pruned N ghost node(s) from M deleted file(s)`.
+
+If the update reports that it **refused to write** because the rebuild had fewer nodes, and S1.5
+found no override flag, note it — S2.5 handles the leftover stale nodes.
+
+### Step S2.5: Prune Stale Nodes
+
+`graphify update` prunes nodes for files it knows were deleted, but nodes survive when the update
+never ran, when its shrink guard blocked the write-back, or when files left the corpus via
+`.graphifyignore` rather than deletion. Those stale nodes then show up in every doc fence and make
+the S3.5 diff meaningless.
+
+Write this to `graphify-out/.forge_prune.py` with the **Write tool**, run it, then delete it:
+
+```python
+"""Drop graph nodes whose source_file no longer exists. Stdlib only, no networkx."""
+import json
+import sys
+from pathlib import Path
+
+MAX_DROP_RATIO = 0.5
+
+graph_path = Path(sys.argv[1] if len(sys.argv) > 1 else "graphify-out/graph.json").resolve()
+# graph.json lives at <repo-root>/graphify-out/graph.json — source_file values are
+# repo-root-relative, so resolve against the root, not the cwd.
+root = graph_path.parent.parent
+
+data = json.loads(graph_path.read_text(encoding="utf-8"))
+nodes = data.get("nodes", [])
+total = len(nodes)
+
+
+def src_of(n):
+    s = n.get("source_file")
+    # Windows-built graphs store lib\foo.dart; normalize before touching the filesystem.
+    return s.replace("\\", "/") if s else None
+
+
+stale_ids, stale_files = set(), set()
+for n in nodes:
+    s = src_of(n)
+    if s is None:
+        continue  # synthetic / concept node — never stale
+    if not (root / s).exists():
+        stale_ids.add(n["id"])
+        stale_files.add(s)
+
+if not stale_ids:
+    print(f"No stale nodes. ({total} nodes)")
+    sys.exit(0)
+
+ratio = len(stale_ids) / total if total else 0
+if ratio > MAX_DROP_RATIO:
+    print(
+        f"REFUSED: prune would drop {len(stale_ids)}/{total} nodes ({ratio:.0%}) "
+        f"from {len(stale_files)} missing file(s) — that is a prune bug, not real deletions."
+    )
+    print(f"  graph root resolved to: {root}")
+    print("  sample missing: " + ", ".join(sorted(stale_files)[:5]))
+    print("Graph left unchanged.")
+    sys.exit(2)
+
+data["nodes"] = [n for n in nodes if n["id"] not in stale_ids]
+data["links"] = [
+    e
+    for e in data.get("links", [])
+    if e.get("source") not in stale_ids and e.get("target") not in stale_ids
+]
+graph_path.write_text(json.dumps(data), encoding="utf-8")
+print(f"Pruned {len(stale_ids)} node(s) from {len(stale_files)} deleted file(s). {len(data['nodes'])} remain.")
 ```
 
-If `--update` flag is not supported by the installed version, fall back to:
 ```bash
-[PYTHON_CMD] -m graphify .
+[PYTHON_CMD] graphify-out/.forge_prune.py graphify-out/graph.json
 ```
 
-Wait for completion.
+Three guards are load-bearing — do not simplify them away:
+
+- **Separator normalization.** A graph built on Windows stores `lib\foo.dart`. Without
+  `.replace("\\", "/")`, a sync run from macOS finds *nothing* on disk and prunes the whole graph.
+- **`source_file is None` is skipped.** Synthetic and concept nodes have no source file and are
+  never stale.
+- **`MAX_DROP_RATIO`.** A prune that would remove more than half the graph is a bug in the prune,
+  not thousands of real deletions. It refuses and reports instead of writing.
+
+**If it prints `REFUSED`:** the script already left the graph untouched. Print its message
+prominently, then **continue into S3 with the unpruned graph** — do not halt the sync. The most
+likely cause is not a prune bug but a legitimate large deletion or a new `.graphifyignore` entry,
+and halting would also block the doc refresh, which has nothing to do with pruning. S3.5's own >20%
+branch catches the resulting diff blowup. Repeat the refusal in the S5 report so it is not lost.
+
+**If nodes were pruned**, community assignments are now stale. Re-cluster using the `[GRAPHIFY]`
+command resolved in S1.5 — same rule as everywhere else, do not hardcode the invocation:
+
+```bash
+graphify cluster-only .
+```
+
+Confirm `cluster-only` is a subcommand on this version first (it appears in `graphify --help`).
+If it is not, keep the pruned graph but have **S4 omit the community-derived lines** from every
+fence. Writing known-wrong community ids into ten docs is worse than writing fewer lines. Say so in
+the S5 report.
+
+Delete `graphify-out/.forge_prune.py` when done.
 
 ### Step S3: Parse Updated Graph
 
@@ -32,16 +193,24 @@ Auto-draft structural changelog entries from what actually changed, so the log c
 2. **If it exists**: build a node-identity key for each node as `label + "@" + source_file`, then compute:
    - `added` = nodes in current `graph.json` but not in `graph.prev.json`
    - `removed` = nodes in `graph.prev.json` but not in current `graph.json`
-   - For file-level context, also run (best-effort — ignore failure): `git diff --name-only HEAD~1 HEAD 2>/dev/null`
-3. **Append a draft block** to `doc/changelog.txt`. This file is user-owned, so mark the block clearly as an editable draft. Use the existing `Date | Change | Description` line style:
+   - For file-level context, also run (best-effort — ignore failure): `git diff --name-only HEAD~1 HEAD`
+3. **Baseline-mismatch check.** Both sides of this diff must be *pruned* graphs (S2.5 guarantees the
+   current side). If `graph.prev.json` was written before S2.5 existed, the first pruned sync shows a
+   large one-time burst of `[Removed]` for nodes that were already stale, and a baseline that was
+   itself pruned against an unpruned current would invent phantom `[Added]`. When either list
+   exceeds ~20% of the graph, do **not** write thousands of entries — write one line instead:
+   ```
+   [TODAY'S DATE] | Baseline realigned | First pruned sync — baseline rewritten, diff resumes next sync
+   ```
+   and skip to step 4.
+4. **Append a draft block** to `doc/changelog.txt`. This file is user-owned, so mark the block clearly as an editable draft. Use the existing `Date | Change | Description` line style:
    ```
    [TODAY'S DATE] | Auto-draft (review/edit) | [Added] <label> (<source_file>) ; [Removed] <label> (<source_file>)
    ```
    List the most significant added/removed nodes (cap ~10 each to stay readable). If nothing structural changed, write one line noting "no structural changes detected."
-4. **Update the baseline** for next time — use the Bash tool:
-   ```bash
-   cp graphify-out/graph.json graphify-out/graph.prev.json
-   ```
+5. **Update the baseline** for next time. Use the **Read tool** on `graphify-out/graph.json` and the
+   **Write tool** to `graphify-out/graph.prev.json` — not a shell `cp`, which does not exist in cmd
+   and must never silently no-op.
 
 Keep the `removed` list in memory — Step S4 uses it for tombstones.
 
@@ -52,8 +221,9 @@ gets noticed without waiting for someone to remember to audit. **Counts only.** 
 source file, do not evaluate anything against the ladder, do not report findings — that is
 `/forge-audit`'s job, and doing it here would turn a routine sync into a slow interactive review.
 
-```bash
-[PYTHON_CMD] - <<'PY'
+Write this to `graphify-out/.forge_bloat.py` with the **Write tool**, run it, then delete it:
+
+```python
 import json
 from collections import defaultdict
 from pathlib import Path
@@ -63,8 +233,10 @@ from networkx.readwrite import json_graph
 data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
 G = json_graph.node_link_graph(data, edges='links')
 
+
 def label_of(n):
     return G.nodes[n].get('label', str(n))
+
 
 def src_of(n):
     s = G.nodes[n].get('source_file')
@@ -88,11 +260,14 @@ gods = [n for n in nodes if G.degree(n) >= cut]
 # /forge:shared-block bloat-buckets
 
 print(f"BLOAT {len(orphans)} {len(dups)} {len(gods)}")
-PY
 ```
 
-Carry the three numbers into the S5 report. Best-effort — if the script fails, omit the line rather
-than blocking the sync.
+```bash
+[PYTHON_CMD] graphify-out/.forge_bloat.py
+```
+
+Carry the three numbers into the S5 report, then delete the script. Best-effort — if it fails, omit
+the line rather than blocking the sync.
 
 ### Step S4: Fence-Aware Merge
 
@@ -103,12 +278,26 @@ For each doc file that has `<!-- graphify:auto start:... -->` markers (v2 set:
 
 1. Read the entire file
 2. Find all fence pairs: `<!-- graphify:auto start:KEY -->` ... `<!-- graphify:auto end:KEY -->`
-3. For each fence pair:
-   - Generate new content based on the updated graph data
+3. **Curated-prose check — do this BEFORE regenerating.** Fence content is replaced wholesale, and
+   AST data cannot reproduce a hand-written sentence. Scan the OLD fence content for lines that are
+   not graph-derivable (anything that is not a god-node list, community list, entry-point list,
+   detected-component list, or a count). If any are found, print this once per fence and **carry
+   those lines through unchanged into the new fence content for this run only**:
+   ```
+   ⚠️ doc/X.md fence project:Y has hand-written lines the graph cannot reproduce:
+        "<line>"
+      Move them below the <!-- graphify:auto end --> marker — fence content is
+      regenerated on every sync and this rescue does not repeat.
+   ```
+   This turns silent data loss into a visible prompt without weakening the contract: the fence still
+   means "regenerated," the user is told exactly what to move and where.
+4. For each fence pair:
+   - Generate new content from the updated graph data — graph-derived facts only
    - Replace ONLY the content between the start and end markers
    - Keep the markers themselves intact
    - Keep all content outside the markers exactly as-is
-4. **Tombstones**: if a node from the S3.5 `removed` list appeared in this fence's PREVIOUS
+   - If S2.5 could not re-cluster, omit the community lines rather than emitting stale ids
+5. **Tombstones**: if a node from the S3.5 `removed` list appeared in this fence's PREVIOUS
    content, append at the end of the new fence content:
    ```
    <!-- graphify:removed: <label> (last seen: YYYY-MM-DD) -->
@@ -116,7 +305,7 @@ For each doc file that has `<!-- graphify:auto start:... -->` markers (v2 set:
    Also carry over any `graphify:removed` lines already present in the old fence content. Cap at 10
    tombstones per fence — drop the oldest beyond that. (Tombstones tell the next reader a module
    was deliberately deleted, not accidentally lost from the docs.)
-5. Write the updated file back
+6. Write the updated file back
 
 ### Step S5: Report Changes
 
@@ -126,6 +315,7 @@ Print a summary of what changed:
 ✅ /forge-contextmap sync complete!
 
 Graph rebuilt: [N] nodes, [M] edges
+  Pruned: [N] stale node(s) from [M] deleted file(s)   [omit if none]
 Docs refreshed:
   doc/architecture.md   — [N] sections updated
   doc/domain-model.md   — [N] sections updated
@@ -144,3 +334,6 @@ User content: untouched (all content outside <!-- graphify:auto --> preserved)
 If all three bloat counts are zero, print `Bloat signal: clean` instead. These are graph pointers,
 not findings — say so if the user reacts to them. `/forge-audit` confirms each against real source
 before anything is called bloat.
+
+If S4's curated-prose check fired, repeat the affected files at the end so the warning is not lost
+above the summary.

@@ -102,32 +102,62 @@ Next steps:
 
 ### Step N4: Install Post-Commit Hook
 
-After creating all files, install the post-commit hook:
+After creating all files, install the post-commit hook.
 
-Use the Bash tool to run:
-```bash
-mkdir -p .git/hooks
+The hook **body** is POSIX `sh` and stays that way — git runs hooks through its own bundled shell on
+every platform, including git-for-windows. What must not be shell is the *installer*: `mkdir -p` and
+`chmod +x` do not exist outside a POSIX shell. Write this to `graphify-out/.forge_hook_install.py`
+with the **Write tool**, run it, then delete it:
+
+```python
+"""Install the contextmap post-commit hook. Cross-platform, stdlib only."""
+import os
+import stat
+import sys
+from pathlib import Path
+
+HOOK = r'''#!/bin/sh
+# contextmap: refresh the knowledge graph after each commit.
+# Failures are logged to graphify-out/.hook.log — never silenced.
+command -v graphify >/dev/null 2>&1 || exit 0
+mkdir -p graphify-out
+{
+  echo "--- $(date) ---"
+  graphify update .
+} >> graphify-out/.hook.log 2>&1 &
+'''
+
+hooks = Path(".git/hooks")
+if not hooks.parent.is_dir():
+    print("Not a git repository — skipping hook install.")
+    sys.exit(0)
+hooks.mkdir(parents=True, exist_ok=True)
+
+path = hooks / "post-commit"
+if path.exists() and "contextmap" not in path.read_text(encoding="utf-8"):
+    print(f"{path} already exists and is not ours — leaving it alone.")
+    print("Add this line to it manually:  graphify update . >> graphify-out/.hook.log 2>&1 &")
+    sys.exit(0)
+
+path.write_text(HOOK, encoding="utf-8", newline="\n")  # LF endings — sh cannot parse CRLF
+if os.name != "nt":  # no-op on Windows; git-for-windows ignores the exec bit
+    path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+print(f"Installed {path}")
 ```
 
-Then write `.git/hooks/post-commit` with this content:
 ```bash
-#!/bin/sh
-# contextmap: rebuild knowledge graph on commit
-if command -v python >/dev/null 2>&1; then
-    PYTHON=python
-elif command -v python3 >/dev/null 2>&1; then
-    PYTHON=python3
-else
-    exit 0
-fi
-if $PYTHON -m graphify --version >/dev/null 2>&1; then
-    ( $PYTHON -m graphify . --update >/dev/null 2>&1 & )
-fi
+[PYTHON_CMD] graphify-out/.forge_hook_install.py
 ```
 
-Make it executable:
-```bash
-chmod +x .git/hooks/post-commit
-```
+Three things the old hook got wrong, all fixed above — do not reintroduce them:
 
-On Windows, the chmod may not apply — that's OK. The hook will still run in Git Bash or WSL.
+- It ran `python -m graphify . --update`, which **matches no released graphify CLI**. The command is
+  `graphify update .`.
+- It sent both stdout and stderr to `/dev/null`, so that failure was **completely invisible**. The
+  graph silently stopped updating on every commit with no error anywhere. Output now appends to
+  `graphify-out/.hook.log`.
+- It was written without forcing LF line endings. A CRLF hook file makes `sh` fail with
+  `bad interpreter` on Windows.
+
+Add `graphify-out/.hook.log` to `.gitignore` if `graphify-out/` is not already ignored. If the graph
+ever looks stale, that log is the first place to check.

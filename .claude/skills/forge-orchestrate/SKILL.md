@@ -62,15 +62,26 @@ Run /forge-contextmap first to build the knowledge graph, then re-run /forge-orc
 <!-- forge:shared-block python-cmd -->
 1. If `graphify-out/.graphify_python` exists, read it — that one line is the interpreter path
    graphify already validated (uv/pipx/venv-aware). Use it verbatim as `[PYTHON_CMD]`.
-2. Otherwise, detect with the Bash tool:
+2. Otherwise, detect with the Bash tool. Run these as **two separate calls** — `||` is not available
+   in PowerShell 5.1, and the first one that succeeds wins:
    ```bash
-   python --version 2>&1 || python3 --version 2>&1
+   python --version
    ```
-   Use whichever of `python` / `python3` works and is ≥ 3.10. If neither is ≥ 3.10, print:
+   ```bash
+   python3 --version
+   ```
+   Use whichever works and is ≥ 3.10. If neither is ≥ 3.10, print:
    ```
    ❌ /forge-orchestrate needs Python 3.10+ to read the graph. Install it, then re-run.
    ```
    and STOP.
+3. Confirm the graph libraries import — the Phase 3a slice needs them:
+   ```bash
+   [PYTHON_CMD] -c "import networkx, json"
+   ```
+   If this fails, `[PYTHON_CMD]` is the wrong interpreter (a common uv/pipx symptom: graphify lives
+   in its own venv while bare `python3` does not have `networkx`). Re-check step 1 for
+   `graphify-out/.graphify_python` before falling back, and tell the user which interpreter you used.
 <!-- /forge:shared-block python-cmd -->
 
 ### 0c. Graph freshness note (print, don't block)
@@ -80,7 +91,7 @@ hook refreshes the graph on every `git commit`, so committed edits are already r
 
 Check for uncommitted changes (best-effort — ignore failure):
 ```bash
-git status --porcelain 2>/dev/null
+git status --porcelain
 ```
 If there are uncommitted changes that look structural (new/renamed source files), print once:
 ```
@@ -195,7 +206,7 @@ edit the current tree in place and the user commits later.
 
 1. **Dirty-tree check** (the one legitimate blocking question):
    ```bash
-   git status --porcelain 2>/dev/null
+   git status --porcelain
    ```
    If the tree is dirty, ASK before proceeding — stash (`git stash push -u`) or abort. Do not
    silently discard or commit the user's pending work.
@@ -208,7 +219,10 @@ edit the current tree in place and the user commits later.
 
 3. **Merge-conflict pre-check** vs the base branch (checklist: "automated merge conflict detection"):
    ```bash
-   git fetch 2>/dev/null; git merge-base --is-ancestor origin/main HEAD 2>/dev/null
+   git fetch
+```
+```bash
+git merge-base --is-ancestor origin/main HEAD
    ```
    If the branch base is behind `main` / a conflict looks likely, print a one-line warning. Do not
    block.

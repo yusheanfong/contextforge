@@ -2,12 +2,21 @@
 
 *Trigger: source files found, no graph.json yet, no old-format docs*
 
+> **Portability contract.** Every command in this file must run identically on macOS, Linux, and
+> Windows. **No heredocs, no `cp`/`mv`/`rm`, no `mkdir -p`/`chmod`, no `2>/dev/null`, no `||`
+> chaining.** Multi-line Python goes into a file written with the **Write tool** and is run as
+> `[PYTHON_CMD] <script>.py`; file copies use the **Read + Write tools**.
+
 ### Step E1: Python Prerequisite Check
 
-Use the Bash tool to check Python version:
+Use the Bash tool to check Python version. Run these as **two separate calls** — `||` is not
+available in PowerShell 5.1, and the first one that succeeds wins:
 
 ```bash
-python --version 2>&1 || python3 --version 2>&1
+python --version
+```
+```bash
+python3 --version
 ```
 
 Parse the version output. If Python is not found OR version is below 3.10:
@@ -30,10 +39,10 @@ Determine which command works (`python` or `python3`) and use it for all subsequ
 
 Check if Graphify is installed:
 ```bash
-[PYTHON_CMD] -m graphify --version 2>&1
+graphify --version
 ```
 
-If not found, install it. Choose the target by environment so we never break a managed env nor pollute the global one — `--user` is invalid inside a virtualenv, so only use it when no env is active:
+If the command is not found, try `[PYTHON_CMD] -m graphify --version`. If neither resolves, install it. Choose the target by environment so we never break a managed env nor pollute the global one — `--user` is invalid inside a virtualenv, so only use it when no env is active:
 
 - **If a virtualenv/conda/poetry env is active** — detect via `$VIRTUAL_ENV` being set, or `[PYTHON_CMD] -c "import sys; print(sys.prefix != sys.base_prefix)"` printing `True` — install into it normally:
   ```bash
@@ -44,7 +53,7 @@ If not found, install it. Choose the target by environment so we never break a m
   [PYTHON_CMD] -m pip install --user graphifyy
   ```
 
-Either way, `python -m graphify` resolves afterward. Note: the PyPI package name is `graphifyy` (double y) — this is correct and verified, NOT a typo. Do not change it to `graphify`. After pip install, run the post-install setup:
+Note: the PyPI package name is `graphifyy` (double y) — this is correct and verified, NOT a typo. Do not change it to `graphify`. The installed **command** is `graphify` (single y). After pip install, run the post-install setup:
 ```bash
 graphify install
 ```
@@ -54,18 +63,30 @@ If `graphify install` fails (command not found), try:
 [PYTHON_CMD] -m graphify install
 ```
 
+### Step E2.5: Resolve the Graphify CLI
+
+Follow the `graphify-cli` shared block in `references/sync.md` Step S1.5 — it
+probes the installed CLI once and caches `build=` / `update=` commands to
+`graphify-out/.graphify_cli`. Do not hardcode an invocation here; graphify's CLI is verb-based
+(`graphify update <path>`) and its flags differ across versions.
+
 ### Step E3: Analyze Codebase
 
-Run the graph builder:
-```bash
-[PYTHON_CMD] -m graphify .
-```
+Run the `build=` command resolved in E2.5.
 
 This will take time depending on codebase size. Wait for it to complete. It produces:
 - `graphify-out/graph.json` — the knowledge graph
 - `graphify-out/GRAPH_REPORT.md` — human-readable summary
 
 If it fails, print the error and ask the user to check their Graphify installation.
+
+**Scope the corpus with `.graphifyignore` before the first build.** Graphify honors a
+`.graphifyignore` file at the repo root using gitignore syntax. Vendored code, generated bridges,
+build output, and platform scaffolding otherwise land in the graph, inflate every doc fence, and
+swamp the sync diff with churn that has nothing to do with your source. If the repo has directories
+like `gauge_reader_bridge/`, `.android/`, `build/`, `node_modules/`, or `Pods/`, list them there
+first — it is far cheaper than pruning them out afterwards. Check whether one exists; if not,
+propose the entries you'd add and let the user confirm before creating it.
 
 ### Step E4: Parse Graph and Extract Understanding
 
@@ -139,7 +160,9 @@ For each doc file, use the fence format to mark graph-generated content. All con
 
 - `## Goal` — Ask user: "What's the goal of this project?" if not already known from E5. Use their answer.
 - `## Tech Stack` — inferred from graph + user confirmation.
-- Add this section after Tech Stack:
+- Add this section after Tech Stack. The `### Notes` heading is not optional — it is where any
+  hand-written description must live, because fence content is regenerated wholesale on every sync
+  (see `references/fence-format.md`):
   ```
   ## Key Architecture (from Graphify)
   <!-- graphify:auto start:project:claude-summary -->
@@ -147,6 +170,12 @@ For each doc file, use the fence format to mark graph-generated content. All con
   **Communities**: [community names/descriptions]
   **Entry points**: [main files]
   <!-- graphify:auto end:project:claude-summary -->
+
+  ### Notes
+  <!-- User-owned. Sync never touches anything below the end marker.
+       Put architecture prose the graph can't derive here — what a module is FOR,
+       why a decision was made, non-obvious data flow. -->
+  [FILL IN]
   ```
 - Omit the design-brief / backend-schema navigation lines and rule references when `[HAS_UI]` / `[HAS_BACKEND]` are false.
 

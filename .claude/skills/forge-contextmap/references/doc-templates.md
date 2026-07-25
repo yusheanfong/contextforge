@@ -21,6 +21,19 @@ PROJECT and MIGRATION modes. Conditional rules: `design-brief.md` only if `[HAS_
 ## Tech Stack
 [TECH_STACK]
 
+## Key Architecture (from Graphify)
+<!-- graphify:auto start:project:claude-summary -->
+(empty until the first /forge-contextmap sync)
+<!-- graphify:auto end:project:claude-summary -->
+
+### Notes
+<!-- User-owned. Sync never touches anything below the end marker.
+     Put architecture prose the graph can't derive here — what a module is FOR,
+     why a decision was made, non-obvious data flow.
+     Do NOT write it inside the fence above: fence content is regenerated
+     wholesale on every sync and prose there is destroyed. -->
+[FILL IN]
+
 ## Doc Navigation
 All project docs live in /doc:
 - doc/prd.md              — Product requirements: idea overview, core features (F1..Fn), out of scope
