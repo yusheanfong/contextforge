@@ -48,28 +48,45 @@ Run /forge-contextmap first to build the knowledge graph, then re-run /forge-aud
 ### 0c. Resolve the Python interpreter as `[PYTHON_CMD]`
 
 <!-- forge:shared-block python-cmd -->
-1. If `graphify-out/.graphify_python` exists, read it — that one line is the interpreter path
-   graphify already validated (uv/pipx/venv-aware). Use it verbatim as `[PYTHON_CMD]`.
-2. Otherwise, detect with the Bash tool. Run these as **two separate calls** — `||` is not available
-   in PowerShell 5.1, and the first one that succeeds wins:
+Graphify is normally installed with **uv** or **pipx**, which put it in its own virtualenv. That
+venv's python has `networkx`; your system `python3` almost certainly does not. Resolving the wrong
+one is the single most common way these scripts die. Work down this list and stop at the first
+interpreter that passes step 5.
+
+1. If `graphify-out/.graphify_python` exists, read it — that one line is an interpreter path graphify
+   already validated. Use it verbatim. (Recent graphify CLI versions do **not** write this file, so
+   expect it to be missing and keep going.)
+2. **uv** — ask uv where its tools live:
+   ```bash
+   uv tool dir
+   ```
+   Then try, in order, `<that dir>/graphifyy/bin/python` (macOS/Linux) and
+   `<that dir>\graphifyy\Scripts\python.exe` (Windows). A path that does not exist just errors —
+   harmless, move on.
+3. **pipx** — same idea:
+   ```bash
+   pipx environment --value PIPX_LOCAL_VENVS
+   ```
+   Try `<that dir>/graphifyy/bin/python` and `<that dir>\graphifyy\Scripts\python.exe`.
+4. Fall back to the bare interpreter. Run these as **two separate calls** — `||` is not available in
+   PowerShell 5.1, and the first that succeeds wins:
    ```bash
    python --version
    ```
    ```bash
    python3 --version
    ```
-   Use whichever works and is ≥ 3.10. If neither is ≥ 3.10, print:
-   ```
-   ❌ /forge-audit needs Python 3.10+ to read the graph. Install it, then re-run.
-   ```
-   and STOP.
-3. Confirm the graph libraries import — the Phase 1 scan needs them:
+5. **Verify the candidate before accepting it** — the Phase 1 scan needs them:
    ```bash
    [PYTHON_CMD] -c "import networkx, json"
    ```
-   If this fails, `[PYTHON_CMD]` is the wrong interpreter (a common uv/pipx symptom: graphify lives
-   in its own venv while bare `python3` does not have `networkx`). Re-check step 1 for
-   `graphify-out/.graphify_python` before falling back, and tell the user which interpreter you used.
+   If it fails, this is the wrong interpreter — go back and try the next candidate. If **every**
+   candidate fails, print:
+   ```
+   ❌ /forge-audit found no Python with networkx. Graphify installs one in its own venv —
+      try: uv tool install graphifyy   (or: pipx install graphifyy)
+   ```
+   and STOP. Always report which interpreter you settled on.
 <!-- /forge:shared-block python-cmd -->
 
 ---

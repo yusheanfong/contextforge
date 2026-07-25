@@ -11,28 +11,45 @@
 ### Step S1: Resolve the Python Interpreter
 
 <!-- forge:shared-block python-cmd -->
-1. If `graphify-out/.graphify_python` exists, read it — that one line is the interpreter path
-   graphify already validated (uv/pipx/venv-aware). Use it verbatim as `[PYTHON_CMD]`.
-2. Otherwise, detect with the Bash tool. Run these as **two separate calls** — `||` is not available
-   in PowerShell 5.1, and the first one that succeeds wins:
+Graphify is normally installed with **uv** or **pipx**, which put it in its own virtualenv. That
+venv's python has `networkx`; your system `python3` almost certainly does not. Resolving the wrong
+one is the single most common way these scripts die. Work down this list and stop at the first
+interpreter that passes step 5.
+
+1. If `graphify-out/.graphify_python` exists, read it — that one line is an interpreter path graphify
+   already validated. Use it verbatim. (Recent graphify CLI versions do **not** write this file, so
+   expect it to be missing and keep going.)
+2. **uv** — ask uv where its tools live:
+   ```bash
+   uv tool dir
+   ```
+   Then try, in order, `<that dir>/graphifyy/bin/python` (macOS/Linux) and
+   `<that dir>\graphifyy\Scripts\python.exe` (Windows). A path that does not exist just errors —
+   harmless, move on.
+3. **pipx** — same idea:
+   ```bash
+   pipx environment --value PIPX_LOCAL_VENVS
+   ```
+   Try `<that dir>/graphifyy/bin/python` and `<that dir>\graphifyy\Scripts\python.exe`.
+4. Fall back to the bare interpreter. Run these as **two separate calls** — `||` is not available in
+   PowerShell 5.1, and the first that succeeds wins:
    ```bash
    python --version
    ```
    ```bash
    python3 --version
    ```
-   Use whichever works and is ≥ 3.10. If neither is ≥ 3.10, print:
-   ```
-   ❌ /forge-contextmap needs Python 3.10+ to read the graph. Install it, then re-run.
-   ```
-   and STOP.
-3. Confirm the graph libraries import — every later step in this file runs a script that needs them:
+5. **Verify the candidate before accepting it** — every later step in this file runs a script that needs them:
    ```bash
    [PYTHON_CMD] -c "import networkx, json"
    ```
-   If this fails, `[PYTHON_CMD]` is the wrong interpreter (a common uv/pipx symptom: graphify lives
-   in its own venv while bare `python3` does not have `networkx`). Re-check step 1 for
-   `graphify-out/.graphify_python` before falling back, and tell the user which interpreter you used.
+   If it fails, this is the wrong interpreter — go back and try the next candidate. If **every**
+   candidate fails, print:
+   ```
+   ❌ /forge-contextmap found no Python with networkx. Graphify installs one in its own venv —
+      try: uv tool install graphifyy   (or: pipx install graphifyy)
+   ```
+   and STOP. Always report which interpreter you settled on.
 <!-- /forge:shared-block python-cmd -->
 
 ### Step S1.5: Resolve the Graphify CLI
@@ -50,27 +67,34 @@ versions. Never hardcode an invocation — resolve it once, then reuse.
    ```bash
    graphify --version
    ```
-   If the command is not found, fall back to `[PYTHON_CMD] -m graphify --version`. If **neither**
-   resolves, graphify is not installed — print the install guidance from
-   `references/existing-project.md` Step E2 and STOP. Call whichever worked `[GRAPHIFY]`.
-3. Probe the update subcommand for a shrink-override flag:
+   If the command is not found, graphify is not installed — print the install guidance from
+   `references/existing-project.md` Step E2 and STOP. Call the resolved command `[GRAPHIFY]`.
+3. Read the command list — it is the authority, not this file:
    ```bash
-   graphify update --help
+   graphify --help
    ```
-   `graphify update` is incremental and, on some versions, **refuses to overwrite `graph.json` when
-   the rebuild has fewer nodes than the existing graph.** Look in the help output for a flag that
-   overrides that — `--force`, `--overwrite`, `--allow-shrink`, or similar wording. Use whichever
-   name the help output actually shows. If no such flag exists, record none — do **not** invent one.
+   Confirm three things and note what you find:
+   - **The build verb.** There is **no bare `graphify <path>` form.** Building is
+     `graphify extract <path>` — "headless full extraction (AST + semantic LLM)". Append
+     **`--code-only`** when no LLM API key is configured: it indexes code by local AST with no API
+     call, which is also the right choice for a code-only repo.
+   - **The shrink-override flag on `update`.** `graphify update` is incremental and **refuses to
+     overwrite `graph.json` when the rebuild has fewer nodes than the existing graph.** As of 0.9.26
+     the override is `--force` (`overwrite graph.json even if the rebuild has fewer nodes`; env var
+     `GRAPHIFY_FORCE=1`). Use whatever name *this* version's help shows. If no such flag exists,
+     record none — do **not** invent one.
+   - **Whether `cluster-only <path>` exists** (S2.5 re-clusters with it).
 4. Write `graphify-out/.graphify_cli` with the **Write tool** (create `graphify-out/` first if the
    directory does not exist — in EXISTING PROJECT MODE it will not until graphify's first run):
    ```
-   build=[GRAPHIFY] .
-   update=[GRAPHIFY] update . <force-flag if the probe found one>
+   build=[GRAPHIFY] extract . <--code-only if no LLM backend is configured>
+   update=[GRAPHIFY] update . <force-flag if step 3 found one>
    ```
 5. Use those two commands verbatim wherever this skill needs to build or update the graph.
 
 *Why probe instead of hardcode:* `python -m graphify . --update` — the invocation this skill used to
-ship — matches no released graphify CLI. It fails, or silently does nothing when backgrounded.
+ship — matches no released graphify CLI. It fails, or silently does nothing when backgrounded. The
+verb set has also churned across versions, so read `graphify --help` rather than trusting this list.
 <!-- /forge:shared-block graphify-cli -->
 
 ### Step S2: Rebuild Graph
@@ -96,7 +120,10 @@ import json
 import sys
 from pathlib import Path
 
-MAX_DROP_RATIO = 0.5
+# A real refactor can legitimately delete most of a corpus (observed: 61%).
+# The failure this guards against — a bad root, or Windows separators read on POSIX —
+# has a different signature: NOTHING resolves. Calibrate for that, not for "a lot".
+MAX_DROP_RATIO = 0.9
 
 graph_path = Path(sys.argv[1] if len(sys.argv) > 1 else "graphify-out/graph.json").resolve()
 # graph.json lives at <repo-root>/graphify-out/graph.json — source_file values are
@@ -127,11 +154,13 @@ if not stale_ids:
     print(f"No stale nodes. ({total} nodes)")
     sys.exit(0)
 
-ratio = len(stale_ids) / total if total else 0
+sourced = sum(1 for n in nodes if src_of(n) is not None)
+ratio = len(stale_ids) / sourced if sourced else 0
 if ratio > MAX_DROP_RATIO:
     print(
-        f"REFUSED: prune would drop {len(stale_ids)}/{total} nodes ({ratio:.0%}) "
-        f"from {len(stale_files)} missing file(s) — that is a prune bug, not real deletions."
+        f"REFUSED: prune would drop {len(stale_ids)}/{sourced} source-backed nodes "
+        f"({ratio:.0%}) from {len(stale_files)} missing file(s). Nearly nothing resolved "
+        f"on disk — that is a root/separator bug, not real deletions."
     )
     print(f"  graph root resolved to: {root}")
     print("  sample missing: " + ", ".join(sorted(stale_files)[:5]))
@@ -158,8 +187,10 @@ Three guards are load-bearing — do not simplify them away:
   `.replace("\\", "/")`, a sync run from macOS finds *nothing* on disk and prunes the whole graph.
 - **`source_file is None` is skipped.** Synthetic and concept nodes have no source file and are
   never stale.
-- **`MAX_DROP_RATIO`.** A prune that would remove more than half the graph is a bug in the prune,
-  not thousands of real deletions. It refuses and reports instead of writing.
+- **`MAX_DROP_RATIO`.** Measured against *source-backed* nodes only, at 90%. A real refactor can
+  legitimately delete most of a corpus — 61% was observed in testing and must pass. The failure
+  being guarded against (bad root, or Windows separators read on POSIX) looks different: **nothing**
+  resolves. Tuning this below ~0.9 turns ordinary cleanups into false refusals.
 
 **If it prints `REFUSED`:** the script already left the graph untouched. Print its message
 prominently, then **continue into S3 with the unpruned graph** — do not halt the sync. The most
