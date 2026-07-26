@@ -7,10 +7,24 @@
 > chaining.** Multi-line Python goes into a file written with the **Write tool** and is run as
 > `[PYTHON_CMD] <script>.py`; file copies use the **Read + Write tools**.
 
-### Step E1: Python Prerequisite Check
+### Step E1: Python Prerequisite Check — resolves the **bootstrap** interpreter
 
-Use the Bash tool to check Python version. Run these as **two separate calls** — `||` is not
-available in PowerShell 5.1, and the first one that succeeds wins:
+There are **two different interpreters** in this skill; do not merge them.
+
+| | `[BOOTSTRAP_PY]` (this step) | `[PYTHON_CMD]` (Step E2.6 onward) |
+|---|---|---|
+| Needs | any Python **≥ 3.10** | Python **with networkx** |
+| Used for | `pip install graphifyy` in E2 | every `.forge_*.py` script |
+| Resolved | before graphify exists | after E2 confirms graphify exists |
+
+This step resolves **`[BOOTSTRAP_PY]` only**. It cannot use the `python-cmd` ladder in
+`references/sync.md` S1, because that ladder verifies `import networkx` — which can only pass on an
+interpreter that *already has graphify installed*. Using it here would make E2's install branch
+unreachable on the machine E2 exists to serve.
+
+Use the Bash tool. Run each as a **separate call** — `||` is not available in PowerShell 5.1. **Do
+not stop at the first command that answers**; a box can have a `python3` that is too old *and* a
+newer interpreter one command away. Work down the list and keep the first result that is **≥ 3.10**:
 
 ```bash
 python --version
@@ -18,22 +32,49 @@ python --version
 ```bash
 python3 --version
 ```
+```bash
+python3.13 --version
+```
+```bash
+python3.12 --version
+```
+```bash
+python3.11 --version
+```
 
-Parse the version output. If Python is not found OR version is below 3.10:
-- Print this exact error and STOP:
+If none of those is ≥ 3.10, try graphify's own tool venv before giving up — if graphify is already
+installed via uv or pipx, its interpreter is ≥ 3.10 by construction:
+
+```bash
+uv tool dir
+```
+```bash
+pipx environment --value PIPX_LOCAL_VENVS
+```
+
+and test `<that dir>/graphifyy/bin/python --version` (macOS/Linux) or
+`<that dir>\graphifyy\Scripts\python.exe --version` (Windows). A path that does not exist just
+errors — harmless, move on.
+
+Only if **every** candidate above is missing or below 3.10, print this exact error and STOP:
   ```
   ❌ Graphify requires Python 3.10 or higher.
-  
+
   Found: [version found, or "Python not found"]
-  
+
   Fix options:
   - Install Python 3.10+: https://www.python.org/downloads/
   - On Windows, ensure 'python' or 'python3' is on your PATH
-  
+
   After fixing, run /forge-contextmap again.
   ```
 
-Determine which command works (`python` or `python3`) and use it for all subsequent commands. Store as `[PYTHON_CMD]`.
+Store the winner as `[BOOTSTRAP_PY]` and report which one you settled on.
+
+> **Why the list, not just two commands.** Stock macOS ships `python3` 3.9 and **no** `python` at
+> all. Stopping at the first command that answers meant printing the 3.10 error on a box that had a
+> perfectly good 3.10+ interpreter — `/forge-contextmap` was simply unusable there. Windows never
+> surfaced this because its `python` was already 3.10+.
 
 ### Step E2: Install Graphify
 
@@ -42,15 +83,15 @@ Check if Graphify is installed:
 graphify --version
 ```
 
-If the command is not found, try `[PYTHON_CMD] -m graphify --version`. If neither resolves, install it. Choose the target by environment so we never break a managed env nor pollute the global one — `--user` is invalid inside a virtualenv, so only use it when no env is active:
+If the command is not found, try `[BOOTSTRAP_PY] -m graphify --version`. If neither resolves, install it. Choose the target by environment so we never break a managed env nor pollute the global one — `--user` is invalid inside a virtualenv, so only use it when no env is active:
 
-- **If a virtualenv/conda/poetry env is active** — detect via `$VIRTUAL_ENV` being set, or `[PYTHON_CMD] -c "import sys; print(sys.prefix != sys.base_prefix)"` printing `True` — install into it normally:
+- **If a virtualenv/conda/poetry env is active** — detect via `$VIRTUAL_ENV` being set, or `[BOOTSTRAP_PY] -c "import sys; print(sys.prefix != sys.base_prefix)"` printing `True` — install into it normally:
   ```bash
-  [PYTHON_CMD] -m pip install graphifyy
+  [BOOTSTRAP_PY] -m pip install graphifyy
   ```
 - **Otherwise** (no managed env active), use `--user` to avoid touching global/system site-packages and to avoid needing sudo:
   ```bash
-  [PYTHON_CMD] -m pip install --user graphifyy
+  [BOOTSTRAP_PY] -m pip install --user graphifyy
   ```
 
 Note: the PyPI package name is `graphifyy` (double y) — this is correct and verified, NOT a typo. Do not change it to `graphify`. The installed **command** is `graphify` (single y). After pip install, run the post-install setup:
@@ -60,7 +101,7 @@ graphify install
 
 If `graphify install` fails (command not found), try:
 ```bash
-[PYTHON_CMD] -m graphify install
+[BOOTSTRAP_PY] -m graphify install
 ```
 
 ### Step E2.5: Resolve the Graphify CLI
@@ -70,15 +111,45 @@ probes the installed CLI once and caches `build=` / `update=` commands to
 `graphify-out/.graphify_cli`. Do not hardcode an invocation here; graphify's CLI is verb-based
 (`graphify update <path>`) and its flags differ across versions.
 
+### Step E2.6: Resolve `[PYTHON_CMD]` (the verified interpreter)
+
+Graphify is now installed, so the `python-cmd` ladder can run. Follow the `python-cmd` shared block
+in `references/sync.md` Step S1 and store the result as `[PYTHON_CMD]`. Every `.forge_*.py` script
+below uses it — **not `[BOOTSTRAP_PY]`**, which is only guaranteed to be ≥ 3.10 and may have no
+networkx.
+
 ### Step E3: Analyze Codebase
 
-Run the `build=` command resolved in E2.5.
+Run **both** commands resolved in E2.5, in this order:
 
-This will take time depending on codebase size. Wait for it to complete. It produces:
-- `graphify-out/graph.json` — the knowledge graph
+1. The `build=` command — full AST extraction.
+2. The `update=` command — immediately after.
+
+Then run the prune script from `references/sync.md` Step S2.5 (write it, run it, delete it — do not
+duplicate the script here).
+
+This will take time depending on codebase size. Wait for each to complete. Together they produce:
+- `graphify-out/graph.json` — the knowledge graph, code-only after the prune
 - `graphify-out/GRAPH_REPORT.md` — human-readable summary
 
-If it fails, print the error and ask the user to check their Graphify installation.
+If either fails, print the error and ask the user to check their Graphify installation.
+
+> **Why `update` runs here too.** `build=` alone does **not** write `GRAPH_REPORT.md`.
+> `graphify extract --code-only` finishes with
+> `next: run 'graphify cluster-only <path>' to generate GRAPH_REPORT.md` — and stops. E4 below and
+> CLAUDE.md Rule 1 both tell readers to open that file, so without this step the very first session
+> after scaffolding hits a missing file. `graphify update` writes it as a side effect. Use that
+> rather than `cluster-only`, which does LLM community naming by default and stalls on a box with no
+> API key.
+>
+> On graphify 0.9.26 the extra `update` is otherwise a no-op: measured on a Python repo, the node and
+> edge sets after `build` and after `build → update → prune` are byte-identical. It is cheap
+> insurance, not a rewrite.
+>
+> **The prune is the part that matters for stability.** `graphify update` has no `--code-only`, so it
+> indexes the markdown this skill is about to write. Without the prune, sync #1 sees a graph 60%
+> larger than the one the docs were generated from and rewrites every fence. With it, E3 and every
+> later sync produce the same graph identity — verified idempotent across three consecutive runs.
 
 **Scope the corpus with `.graphifyignore` before the first build.** Graphify honors a
 `.graphifyignore` file at the repo root using gitignore syntax. Vendored code, generated bridges,
@@ -90,18 +161,100 @@ propose the entries you'd add and let the user confirm before creating it.
 
 ### Step E4: Parse Graph and Extract Understanding
 
-Use the Read tool to read `graphify-out/graph.json`.
+**Do not read `graphify-out/graph.json` with the Read tool** — it is ~424 KB for a 57-file repo and
+grows from there. Write this to `graphify-out/.forge_parse.py` with the **Write tool**, run it, read
+its output, then delete it:
 
-From the JSON, extract:
-- **God nodes**: nodes with the highest number of connections (edges). Sort nodes by degree (count of edges involving that node). Take top 10.
-- **Communities**: group nodes by their `community` field. For each community, list the node labels and the most common `source_file` paths.
-- **Entry points**: nodes whose `source_file` contains `main`, `index`, `app`, `program`, `entrypoint`, or similar.
-- **API surface**: nodes with edges of confidence `EXTRACTED` that cross community boundaries, or nodes whose label contains `api`, `service`, `controller`, `handler`, `endpoint`, `route`.
-- **High-confidence edges**: edges with confidence `EXTRACTED` (facts the parser confirmed from AST). Note dominant patterns.
-- **UI presence** (`[HAS_UI]`): true if nodes look like screens/widgets/views/components/pages.
-- **Backend presence** (`[HAS_BACKEND]`): true if nodes look like ORM models, SQL/migration files, controllers/handlers, or DB clients.
+```python
+"""Summarize graph.json for the E5 understanding. Stdlib only, no networkx."""
+import json
+from collections import Counter, defaultdict
+from pathlib import Path
 
-Also read `graphify-out/GRAPH_REPORT.md` for the summary Graphify generated.
+data = json.loads(Path("graphify-out/graph.json").read_text(encoding="utf-8"))
+nodes = {n["id"]: n for n in data.get("nodes", [])}
+links = data.get("links", [])
+
+ENTRY_HINTS = ("main", "index", "app", "program", "entrypoint")
+API_HINTS = ("api", "service", "controller", "handler", "endpoint", "route")
+UI_HINTS = ("screen", "widget", "view", "component", "page", "activity", "fragment")
+DB_HINTS = ("model", "entity", "repository", "schema", "migration", "dao", "orm")
+
+
+def src_of(n):
+    s = n.get("source_file")
+    return s.replace("\\", "/") if s else None
+
+
+def label_of(n):
+    return n.get("label", str(n.get("id")))
+
+
+deg = Counter()
+for e in links:
+    deg[e.get("source")] += 1
+    deg[e.get("target")] += 1
+
+print("== NODE COUNT ==", len(nodes), "edges", len(links))
+print("== FILE_TYPE ==", dict(Counter(n.get("file_type") for n in nodes.values())))
+
+print("== GOD NODES (top 10) ==")
+for nid, d in deg.most_common(10):
+    n = nodes.get(nid)
+    if n:
+        print(f"  {label_of(n)} | {src_of(n)} | degree={d}")
+
+print("== COMMUNITIES ==")
+comms = defaultdict(list)
+for n in nodes.values():
+    comms[n.get("community")].append(n)
+for cid, members in sorted(comms.items(), key=lambda kv: -len(kv[1]))[:15]:
+    files = Counter(src_of(m) for m in members if src_of(m))
+    top = ", ".join(f for f, _ in files.most_common(3))
+    names = ", ".join(label_of(m) for m in members[:5])
+    print(f"  c{cid} ({len(members)} nodes) files: {top} | {names}")
+
+print("== ENTRY POINTS ==")
+entries = {src_of(n) for n in nodes.values()
+           if src_of(n) and any(h in Path(src_of(n)).stem.lower() for h in ENTRY_HINTS)}
+for f in sorted(entries):
+    print("  ", f)
+
+print("== API SURFACE ==")
+api = sorted({f"{label_of(n)} | {src_of(n)}" for n in nodes.values()
+              if any(h in label_of(n).lower() for h in API_HINTS)
+              or (src_of(n) and any(h in src_of(n).lower() for h in API_HINTS))})
+for a in api[:25]:
+    print("  ", a)
+
+print("== RELATIONS (high-confidence patterns) ==")
+rel = Counter((e.get("relation"), e.get("confidence")) for e in links)
+for (r, c), k in rel.most_common(12):
+    print(f"  {r} [{c}] x{k}")
+
+blob = " ".join(f"{label_of(n)} {src_of(n) or ''}" for n in nodes.values()).lower()
+print("== HAS_UI ==", any(h in blob for h in UI_HINTS))
+print("== HAS_BACKEND ==", any(h in blob for h in DB_HINTS))
+```
+
+```bash
+[PYTHON_CMD] graphify-out/.forge_parse.py
+```
+
+Read that output and derive:
+- **God nodes** — the top-degree list.
+- **Communities** — name each from its node labels and dominant `source_file` paths.
+- **Entry points**, **API surface**, **dominant patterns** (from the relation/confidence census).
+- **UI presence** (`[HAS_UI]`) and **Backend presence** (`[HAS_BACKEND]`) — the script's booleans are
+  a hint, not a verdict; sanity-check them against the community and file listings.
+
+Note: use the **`file_type`** field, not `type`. Graphify 0.9.26 leaves `type` unset on every node
+(`Counter({None: 397})` on a real repo), so any logic keyed on `type` silently sees nothing.
+
+Delete `graphify-out/.forge_parse.py` once you have the output.
+
+Also read `graphify-out/GRAPH_REPORT.md` for the summary Graphify generated (E3's `update` step
+writes it; if it is somehow absent, carry on without it rather than stopping).
 
 ### Step E5: Present Understanding to User
 

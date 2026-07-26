@@ -156,8 +156,8 @@ The post-commit hook rebuilds `graph.json` on every commit yet never writes docs
 [Then hand it straight to the pipeline](#forge-diagnose--find-the-root-cause-hand-it-off).
 
 **Sync surfaces the audit trigger.** Since sync already has the graph loaded, it prints orphan /
-duplicate-label / god-node counts. Those are pointers, not findings — `/forge-audit` is what
-confirms them against real source.
+duplicate-label / god-node / dead-file counts. Those are pointers, not findings — `/forge-audit` is
+what confirms them against real source.
 
 **`/forge-audit` vs `/forge-orchestrate`'s built-in review:** `/forge-orchestrate` reviews a *single fresh diff* at
 commit time (its over-engineering gate). `/forge-audit` sweeps *already-landed* code across the whole repo.
@@ -326,7 +326,7 @@ code decides*).
 
 Flow:
 1. **Hard stop** if no `graphify-out/graph.json` — run `/forge-contextmap` first
-2. **Graph scan** — surfaces three candidate buckets: orphans / near-dead nodes, duplicate labels across files, and god nodes (over-centralization)
+2. **Graph scan** — surfaces four candidate buckets: orphans / near-dead nodes, duplicate labels across files, god nodes (over-centralization), and dead files (no edge leaves the file — a case `degree <= 1` structurally cannot catch, since a module scores degree from its own symbols)
 3. **Source confirmation** — opens each candidate's file and evaluates it against the minimal-code ladder (dead? duplicate? stdlib does it? one-liner?), dropping anything the code proves legitimate
 4. **Report** — a grouped delete/simplify list with a rung + rationale per finding, plus god-node structural notes framed as *decompose?* questions, and a summary count
 

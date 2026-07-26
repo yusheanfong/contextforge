@@ -24,8 +24,8 @@ content preserved.
   `/forge-diagnose`, fully user-owned, no fences. MIGRATION MODE reads every file in `doc/`; it must
   treat these as untouchable, not as v1 docs needing upgrade.
 - User-authored content is preserved verbatim — moved, never rewritten.
-- SYNC MODE also prints a **bloat signal** (orphan / duplicate-label / god-node counts) from the
-  graph it already loaded. Counts only — it reads no source and writes nothing extra;
+- SYNC MODE also prints a **bloat signal** (orphan / duplicate-label / god-node / dead-file counts)
+  from the graph it already loaded. Counts only — it reads no source and writes nothing extra;
   `/forge-audit` is what confirms those pointers against real code.
 - `doc/prd.md` and `doc/task-list.md` have NO fences — 100% user-owned.
 - Fence syntax + v2 fence key list: `references/fence-format.md`.

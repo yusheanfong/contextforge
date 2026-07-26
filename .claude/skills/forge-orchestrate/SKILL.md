@@ -356,15 +356,19 @@ the **adaptive gate runner**, then the review checks, then commit on pass.
 ### 5a. Adaptive gate runner
 
 Detect available tooling from the project manifests (`package.json`, `pyproject.toml`,
-`requirements.txt`, `go.mod`, `*.csproj`, etc.), **run what exists, skip + honestly report what
-doesn't**. Never print a passing check for a gate you didn't actually run. Run in this order and
-record each result as `pass` / `fail` / `skipped (reason)`:
+`requirements.txt`, `go.mod`, `*.csproj`, etc.), **or** from a convention directory plus a runner on
+PATH — a `tests/` or `spec/` directory with `pytest` / `go test` / `jest` available is working test
+tooling even with no manifest in the repo. **A missing manifest is not evidence of missing tooling**;
+check PATH before recording a skip. Then **run what exists, skip + honestly report what doesn't**.
+Never print a passing check for a gate you didn't actually run. Run in this order and record each
+result as `pass` / `fail` / `skipped (reason)`:
 
 1. **Lint / style** — e.g. `eslint`, `ruff check`, `flake8`, `dotnet format --verify-no-changes`,
    `go vet`. (checklist: "linting and code style enforcement")
 2. **Tests** — e.g. `npm test`, `pytest`, `go test ./...`, `dotnet test`. MUST pass before commit.
    (checklist: "tests run before allowing merge", "functional tests")
-   - **If NO test runner is detected at all:** the subtask's success criterion cannot be verified.
+   - **If NO test runner is detected at all** — after checking PATH, not just the manifests: the
+     subtask's success criterion cannot be verified.
      Do NOT record a `pass` and do NOT silently commit. Warn loudly and ask once:
      ```
      ⚠️ No test runner detected — I can't verify "[subtask success criterion]" actually works.

@@ -104,6 +104,15 @@ Next steps:
 
 After creating all files, install the post-commit hook.
 
+**First resolve `[PYTHON_CMD]`** — NEW PROJECT MODE has no earlier step that does. Follow the
+`python-cmd` shared block in `references/sync.md` Step S1.
+
+One relaxation applies **here only**: the installer below is **stdlib-only** — no networkx, no
+graphify. So if every ladder candidate fails its `import networkx` check, do **not** hard-stop the
+way sync and audit do; fall back to any interpreter that answers `python --version` or
+`python3 --version` and continue. On stock macOS there is no `python` at all and `python3` is 3.9,
+which is perfectly adequate for this script — guessing `python` would simply fail.
+
 The hook **body** is POSIX `sh` and stays that way — git runs hooks through its own bundled shell on
 every platform, including git-for-windows. What must not be shell is the *installer*: `mkdir -p` and
 `chmod +x` do not exist outside a POSIX shell. Write this to `graphify-out/.forge_hook_install.py`

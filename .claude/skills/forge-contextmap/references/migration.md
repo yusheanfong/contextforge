@@ -57,8 +57,14 @@ Only if `[HAS_BACKEND]`: standard template (`references/doc-templates.md` File 5
 
 ### Step M6: Upgrade `doc/task-list.md` in place
 
-Convert flat checkbox lines to the engineering-plan format. Conversion rules — mechanical, no
-rewording:
+**First check whether it is already v2.** If the file already contains `### Task N.M` headings, it is
+in engineering-plan format — a v1 project can reach here with a task list someone already upgraded by
+hand. Leave the file **byte-untouched**, convert nothing, and record `already v2` for the M8 report.
+Do not add the `## How to work this list` block to a file you are not otherwise rewriting. Then skip
+to M7.
+
+Otherwise, convert flat checkbox lines to the engineering-plan format. Conversion rules — mechanical,
+no rewording:
 
 - Keep the existing `## Goal` and `## Phase N — ...` headings as-is.
 - Each `- [ ] <text>` line under Phase N becomes (numbering by order within the phase):
@@ -127,6 +133,7 @@ Created:
 
 Upgraded in place:
   doc/task-list.md        → engineering-plan format ([N] tasks converted, [M] kept completed)
+                            [or: → already v2 (no conversion needed, file untouched)]
   CLAUDE.md               → v2 navigation + rules, format marker stamped
 
 Deleted (with your OK):

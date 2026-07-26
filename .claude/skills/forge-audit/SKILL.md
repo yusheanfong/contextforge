@@ -110,6 +110,8 @@ from networkx.readwrite import json_graph
 scope = (sys.argv[1] if len(sys.argv) > 1 else "").replace("\\", "/").strip("/")
 
 # forge:shared-block graph-loader
+DOC_SUFFIXES = {".md", ".mdx", ".qmd", ".skill"}
+
 data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
 G = json_graph.node_link_graph(data, edges='links')
 
@@ -119,6 +121,25 @@ def label_of(n):
 def src_of(n):
     s = G.nodes[n].get('source_file')
     return s.replace("\\", "/") if s else None
+
+def is_doc(n):
+    # S2.5 already dropped these, but the post-commit hook's `graphify update`
+    # re-adds them on the next commit — so filter at read time too. file_type
+    # alone is not enough: with an LLM backend the semantic pass mints
+    # file_type="code" nodes for symbols surfaced from inside a doc.
+    ft = G.nodes[n].get('file_type')
+    if ft is not None and ft != 'code':
+        return True
+    s = src_of(n)
+    return s is not None and Path(s).suffix.lower() in DOC_SUFFIXES
+
+
+# Drop doc nodes from the GRAPH, not just from the node list. Filtering membership
+# alone leaves their edges in place, so G.degree() still counts references from
+# markdown (inflating degree, hiding orphans, skewing the god-node cut) and
+# G.neighbors() still yields them (making a dead file look referenced). No-op when
+# S2.5 already pruned; load-bearing when it has not.
+G = G.subgraph([n for n in G.nodes() if not is_doc(n)])
 # /forge:shared-block graph-loader
 
 def in_scope(n):
@@ -171,6 +192,37 @@ gods = sorted(
     [(label_of(n), src_of(n), G.degree(n)) for n in nodes if G.degree(n) >= cut],
     key=lambda t: -t[2],
 )
+
+# --- bucket 4: dead FILES (no edge leaves the file) -> rung 1
+# `degree <= 1` structurally cannot catch these: a module node earns degree from
+# `contains` edges to its own symbols, so a wholly unreferenced file still scores
+# >= 2. The signal is EXTERNAL degree — an edge crossing to another source_file.
+TEST_HINTS = ('tests/', 'test/', 'spec/', '/test_', '/spec_')
+by_file = defaultdict(set)
+for n in nodes:
+    by_file[src_of(n)].add(n)
+
+
+def is_test_path(s):
+    low = '/' + s.lower()
+    name = low.rsplit('/', 1)[-1]
+    return (any(h in low for h in TEST_HINTS)
+            or name.startswith('test_') or name.startswith('spec_')
+            or '_test.' in name or '_spec.' in name)
+
+
+dead_files = []
+for s, members in by_file.items():
+    if is_test_path(s):
+        continue          # HARD GUARD: tests are never delete-listed
+    external = any(
+        src_of(nb) != s
+        for n in members for nb in G.neighbors(n)
+        if src_of(nb)
+    )
+    if not external:
+        dead_files.append(s)
+dead_files.sort()
 # /forge:shared-block bloat-buckets
 print(f"GODNODES (total={len(gods)}, degree>={cut}, median={med})")
 if gods:
@@ -178,6 +230,15 @@ if gods:
         print(f"  {lab} | {src} | degree={deg}")
     if len(gods) > 15:
         print(f"  ... {len(gods) - 15} more not shown")
+else:
+    print("  NO_SIGNAL")
+
+print(f"DEAD_FILES (total={len(dead_files)})")
+if dead_files:
+    for s in dead_files[:20]:
+        print(f"  {s} | {len(by_file[s])} node(s), no edge leaves the file")
+    if len(dead_files) > 20:
+        print(f"  ... {len(dead_files) - 20} more not shown")
 else:
     print("  NO_SIGNAL")
 ```
@@ -192,9 +253,16 @@ Delete `graphify-out/.forge_audit_scan.py` once the scan output is read.
 - **DUPLICATES** (same label across different files) → candidates for **rung 2** (should have reused).
 - **GODNODES** (very high degree) → **structural / over-centralization** — reported separately in
   Phase 3, NOT forced onto a ladder rung.
+- **DEAD_FILES** (no edge leaves the file) → candidates for **rung 1**, at *file* granularity.
+  ORPHANS cannot find these: a module node earns degree from `contains` edges to its own symbols, so
+  a file nothing references still scores `degree >= 2`. Test paths are excluded by construction.
 - `SCOPE_EMPTY` means `[SCOPE]` matched no nodes — tell the user the scope hit nothing (check the
   path / slash style) and stop. A `NO_SIGNAL` under any bucket means honestly report "no signal
   here" rather than inventing findings.
+- **Note any `... N more not shown` line explicitly in the report.** The per-bucket print caps
+  (40 / 30 / 15 / 20) mean a truncated bucket is a partial answer — say "N more candidates were not
+  examined", and offer to re-run with a narrower `[SCOPE]`. Never let a cap read as "that's all of
+  them."
 
 These are POINTERS only. Nothing here is a finding yet — Phase 2 confirms each against real code.
 
@@ -247,16 +315,22 @@ Each line names the over-centralized module + its degree + a **decompose?** ques
 Apply the guard hardest here: a high-degree module is the **most likely false positive** of the three
 signals. Frame each as a question, never a delete.
 
+A `DEAD_FILES` candidate is a **rung 1 / action: delete** finding at file granularity, and gets the
+same Phase 2 treatment as any other: open the file, confirm nothing references it, and grep the
+repo for its symbols before flagging. Dynamic entry points (CLI registrations, plugin discovery,
+reflection, DI containers) are invisible to the AST and are the expected false positive here.
+
 ### Summary count
 
 End with:
 ```
 Audit summary — scope: [SCOPE or "whole repo"]
-  rung 1 (dead):        N
+  rung 1 (dead):        N        of which whole files: N
   rung 2 (duplication): N
   rung 3-7 (other):     N
   structural notes:     N
   files touched:        N        confirmed: N / unconfirmed: N
+  not examined:         N        [omit if no bucket was truncated]
 ```
 
 If the whole scan surfaced nothing worth flagging, say so plainly — a clean codebase is a valid
@@ -295,8 +369,14 @@ result, not a prompt to manufacture findings.
 
 - **Report-only, single-pass.** No subagents, no branches, no gate loop — unlike `/forge-orchestrate`.
   `/forge-audit` reads the graph, confirms against source, and prints. That is the whole command.
-- **What the graph can and can't surface.** Candidates come from three graph signals: orphan → rung
-  1, duplicate label → rung 2, god node → structural. Rungs 3–6 (reinvented stdlib, native feature,
+- **Documentation is filtered out at load time.** `graphify update` indexes markdown (it has no
+  `--code-only`), so `CLAUDE.md` and `doc/*.md` — the files `/forge-contextmap` itself wrote — come
+  back as graph nodes whose headings would otherwise dominate ORPHANS and DUPLICATES. `is_doc()` in
+  the `graph-loader` block drops them. This is a read-time filter because the post-commit hook
+  re-adds them after every commit and `/forge-audit` never prunes.
+- **What the graph can and can't surface.** Candidates come from four graph signals: orphan → rung
+  1, duplicate label → rung 2, dead file → rung 1, god node → structural. Rungs 3–6 (reinvented
+  stdlib, native feature,
   existing dependency, one-liner) have **no discovery mechanism of their own** — they're caught
   opportunistically *while confirming* a graph-surfaced candidate, not by a repo-wide line sweep.
   The ladder is the *evaluation* applied to candidates, not a sweep for every rung. This is
@@ -307,5 +387,10 @@ result, not a prompt to manufacture findings.
   the graph alone.
 - **God nodes are the softest signal.** High degree often means legitimately central, not bloated.
   Reported as a question, outside the ladder taxonomy.
+- **Only `DEAD_FILES` excludes test paths in Phase 1** — it has to, because a test file legitimately
+  has no inbound edges (nothing imports it; the runner discovers it), so every test would otherwise
+  land in the bucket. `ORPHANS` and `GODNODES` do **not** filter test paths: on a large repo, test
+  helpers will appear in ORPHANS and test files in GODNODES. That is not a bug in the scan — the
+  HARD GUARD ("never delete-list tests") is enforced in Phase 2/3, where you drop them. Watch for it.
 - It never rebuilds the graph and never auto-runs `/forge-contextmap`. If `graph.json` is missing it
   hard-stops and asks you to run `/forge-contextmap` manually.

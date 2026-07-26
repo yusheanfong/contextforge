@@ -107,15 +107,23 @@ found no override flag, note it — S2.5 handles the leftover stale nodes.
 
 ### Step S2.5: Prune Stale Nodes
 
-`graphify update` prunes nodes for files it knows were deleted, but nodes survive when the update
-never ran, when its shrink guard blocked the write-back, or when files left the corpus via
-`.graphifyignore` rather than deletion. Those stale nodes then show up in every doc fence and make
-the S3.5 diff meaningless.
+This step does two things: it drops **stale** nodes, and it drops **doc-derived** nodes.
+
+*Stale.* `graphify update` prunes nodes for files it knows were deleted, but nodes survive when the
+update never ran or when its shrink guard blocked the write-back. (Files that left the corpus via
+`.graphifyignore` are handled by `update`'s own corpus sweep, not here — an ignored file still
+exists on disk, so an existence check cannot see it.) Those stale nodes show up in every doc fence
+and make the S3.5 diff meaningless.
+
+*Doc-derived.* `graphify update` has **no `--code-only`** — it indexes markdown too, so the docs this
+skill just wrote come back as graph nodes on the next rebuild. Left in, they rewrite every fence with
+descriptions of the fences, and they swamp the S3.6 / `/forge-audit` bloat buckets with markdown
+headings. Dropping them here is what makes a no-op sync a genuine no-op.
 
 Write this to `graphify-out/.forge_prune.py` with the **Write tool**, run it, then delete it:
 
 ```python
-"""Drop graph nodes whose source_file no longer exists. Stdlib only, no networkx."""
+"""Drop stale + doc-derived graph nodes. Stdlib only, no networkx."""
 import json
 import sys
 from pathlib import Path
@@ -124,6 +132,13 @@ from pathlib import Path
 # The failure this guards against — a bad root, or Windows separators read on POSIX —
 # has a different signature: NOTHING resolves. Calibrate for that, not for "a lot".
 MAX_DROP_RATIO = 0.9
+
+# graphify's own doc dispatch (extract.py _DISPATCH): the suffixes routed to
+# extract_markdown, i.e. exactly the files `graphify update` mints heading nodes for.
+# `.txt` is deliberately absent — it has no AST extractor, so changelog.txt /
+# progress.txt produce no nodes, and dropping it would delete real semantic nodes
+# from a user's .txt corpus.
+DOC_SUFFIXES = {".md", ".mdx", ".qmd", ".skill"}
 
 graph_path = Path(sys.argv[1] if len(sys.argv) > 1 else "graphify-out/graph.json").resolve()
 # graph.json lives at <repo-root>/graphify-out/graph.json — source_file values are
@@ -141,6 +156,18 @@ def src_of(n):
     return s.replace("\\", "/") if s else None
 
 
+def is_doc(n):
+    # file_type alone is NOT sufficient: with an LLM backend the semantic pass mints
+    # file_type="code" nodes for symbols surfaced from inside a doc. Check the suffix too.
+    ft = n.get("file_type")
+    if ft is not None and ft != "code":
+        return True
+    s = src_of(n)
+    # .lower() is load-bearing: macOS is case-insensitive, so README.MD is a real
+    # file, and graphify AST-extracts it (extract.py falls back to suffix.lower()).
+    return s is not None and Path(s).suffix.lower() in DOC_SUFFIXES
+
+
 stale_ids, stale_files = set(), set()
 for n in nodes:
     s = src_of(n)
@@ -149,10 +176,6 @@ for n in nodes:
     if not (root / s).exists():
         stale_ids.add(n["id"])
         stale_files.add(s)
-
-if not stale_ids:
-    print(f"No stale nodes. ({total} nodes)")
-    sys.exit(0)
 
 sourced = sum(1 for n in nodes if src_of(n) is not None)
 ratio = len(stale_ids) / sourced if sourced else 0
@@ -167,30 +190,58 @@ if ratio > MAX_DROP_RATIO:
     print("Graph left unchanged.")
     sys.exit(2)
 
-data["nodes"] = [n for n in nodes if n["id"] not in stale_ids]
+# Doc drop is accounted SEPARATELY from stale — folding it into MAX_DROP_RATIO would
+# trip the refusal on a doc-heavy repo, which is not the failure that guard exists for.
+doc_ids = {n["id"] for n in nodes if is_doc(n)}
+if doc_ids and not (total - len(stale_ids | doc_ids)):
+    # Markdown-only corpus: dropping every node would write ten empty fences.
+    print(f"Corpus is documentation — doc filter disabled ({len(doc_ids)} doc node(s) kept).")
+    doc_ids = set()
+
+drop = stale_ids | doc_ids
+if not drop:
+    print(f"No stale nodes. ({total} nodes)")
+    sys.exit(0)
+
+data["nodes"] = [n for n in nodes if n["id"] not in drop]
 data["links"] = [
     e
     for e in data.get("links", [])
-    if e.get("source") not in stale_ids and e.get("target") not in stale_ids
+    if e.get("source") not in drop and e.get("target") not in drop
 ]
 graph_path.write_text(json.dumps(data), encoding="utf-8")
-print(f"Pruned {len(stale_ids)} node(s) from {len(stale_files)} deleted file(s). {len(data['nodes'])} remain.")
+if stale_ids:
+    print(f"Pruned {len(stale_ids)} node(s) from {len(stale_files)} deleted file(s).")
+if doc_ids:
+    print(f"Dropped {len(doc_ids)} non-code node(s) (docs).")
+print(f"{len(data['nodes'])} node(s) remain.")
 ```
 
 ```bash
 [PYTHON_CMD] graphify-out/.forge_prune.py graphify-out/graph.json
 ```
 
-Three guards are load-bearing — do not simplify them away:
+Five guards are load-bearing — do not simplify them away:
 
 - **Separator normalization.** A graph built on Windows stores `lib\foo.dart`. Without
   `.replace("\\", "/")`, a sync run from macOS finds *nothing* on disk and prunes the whole graph.
 - **`source_file is None` is skipped.** Synthetic and concept nodes have no source file and are
   never stale.
-- **`MAX_DROP_RATIO`.** Measured against *source-backed* nodes only, at 90%. A real refactor can
-  legitimately delete most of a corpus — 61% was observed in testing and must pass. The failure
-  being guarded against (bad root, or Windows separators read on POSIX) looks different: **nothing**
-  resolves. Tuning this below ~0.9 turns ordinary cleanups into false refusals.
+- **`MAX_DROP_RATIO`.** Measured against *source-backed* nodes only, at 90%, and against **stale
+  only**. A real refactor can legitimately delete most of a corpus — 61% was observed in testing and
+  must pass. The failure being guarded against (bad root, or Windows separators read on POSIX) looks
+  different: **nothing** resolves. Tuning this below ~0.9 turns ordinary cleanups into false refusals.
+- **`is_doc` checks the suffix, not just `file_type`.** With an LLM backend configured, graphify's
+  semantic pass mints `file_type="code"` nodes for symbols it surfaced from *inside* a `.md` file. A
+  `file_type == 'code'` test alone passes those straight through. Suffix comparison is lowercased
+  because macOS is case-insensitive and graphify itself dispatches on `suffix.lower()`.
+- **The all-doc floor.** If dropping docs would empty the graph, the filter disables itself. A
+  markdown-only repo would otherwise get ten docs written with empty fences.
+
+**Expect the node count to oscillate, and do not "fix" it.** The post-commit hook runs
+`graphify update`, which re-adds doc nodes; the next sync drops them again. The oscillation lives
+entirely inside `graphify-out/` — a doc fence only ever sees the pruned graph, because S3 reads
+`graph.json` after this step.
 
 **If it prints `REFUSED`:** the script already left the graph untouched. Print its message
 prominently, then **continue into S3 with the unpruned graph** — do not halt the sync. The most
@@ -214,34 +265,86 @@ Delete `graphify-out/.forge_prune.py` when done.
 
 ### Step S3: Parse Updated Graph
 
-Re-read `graphify-out/graph.json`. Extract the same fields as Step E4 in `references/existing-project.md`.
+Re-parse the pruned `graphify-out/graph.json` using the **same `.forge_parse.py` script** as Step E4
+in `references/existing-project.md` — write it, run it, read its output, delete it. **Do not open
+`graph.json` with the Read tool**; it is ~424 KB on a small repo.
 
 ### Step S3.5: Diff Graph and Draft Changelog
 
-Auto-draft structural changelog entries from what actually changed, so the log captures real mutations instead of vague summaries. Use the Read tool on `graphify-out/graph.prev.json` (the baseline saved at the end of the last sync):
+Auto-draft structural changelog entries from what actually changed, so the log captures real
+mutations instead of vague summaries.
 
-1. **If `graphify-out/graph.prev.json` does not exist** (first sync): skip the diff — you'll create the baseline in step 4 below. Note "changelog baseline created — no diff yet."
-2. **If it exists**: build a node-identity key for each node as `label + "@" + source_file`, then compute:
-   - `added` = nodes in current `graph.json` but not in `graph.prev.json`
-   - `removed` = nodes in `graph.prev.json` but not in current `graph.json`
-   - For file-level context, also run (best-effort — ignore failure): `git diff --name-only HEAD~1 HEAD`
+Both graphs are ~500 KB on a small repo, so neither one goes through the Read tool. Write this to
+`graphify-out/.forge_diff.py` with the **Write tool**, run it, then delete it. It prints the diff
+**and** rewrites the baseline in one pass:
+
+```python
+"""Diff graph.json against graph.prev.json, then refresh the baseline. Stdlib only."""
+import json
+import shutil
+import sys
+from pathlib import Path
+
+out = Path("graphify-out")
+cur_path, prev_path = out / "graph.json", out / "graph.prev.json"
+
+
+def keys(path):
+    data = json.loads(path.read_text(encoding="utf-8"))
+    # Identity is label@source_file. Normalize separators so a Windows-built
+    # baseline does not read as "everything removed, everything added" on POSIX.
+    return {
+        f"{n.get('label')}@{(n.get('source_file') or '').replace(chr(92), '/')}": n
+        for n in data.get("nodes", [])
+    }
+
+
+cur = keys(cur_path)
+if not prev_path.exists():
+    print("FIRST_SYNC — no baseline; diff skipped.")
+else:
+    prev = keys(prev_path)
+    added = sorted(set(cur) - set(prev))
+    removed = sorted(set(prev) - set(cur))
+    print(f"added={len(added)} removed={len(removed)} current={len(cur)}")
+    for tag, items in (("ADDED", added), ("REMOVED", removed)):
+        for k in items[:10]:
+            print(f"  {tag} {k}")
+        if len(items) > 10:
+            print(f"  ... {len(items) - 10} more {tag}")
+
+# shutil.copyfile, not a shell `cp` — `cp` does not exist in cmd and must never
+# silently no-op. Copy LAST, so a crash above leaves the old baseline intact.
+shutil.copyfile(cur_path, prev_path)
+print("baseline updated")
+```
+
+```bash
+[PYTHON_CMD] graphify-out/.forge_diff.py
+```
+
+1. **If it prints `FIRST_SYNC`**: there was no baseline; it has just been created. Note "changelog
+   baseline created — no diff yet" and go to step 4.
+2. **Otherwise** read `added` / `removed` from the output. For file-level context, also run
+   (best-effort — ignore failure): `git diff --name-only HEAD~1 HEAD`
 3. **Baseline-mismatch check.** Both sides of this diff must be *pruned* graphs (S2.5 guarantees the
    current side). If `graph.prev.json` was written before S2.5 existed, the first pruned sync shows a
    large one-time burst of `[Removed]` for nodes that were already stale, and a baseline that was
    itself pruned against an unpruned current would invent phantom `[Added]`. When either list
-   exceeds ~20% of the graph, do **not** write thousands of entries — write one line instead:
+   exceeds ~20% of `current`, do **not** write thousands of entries — write one line instead:
    ```
    [TODAY'S DATE] | Baseline realigned | First pruned sync — baseline rewritten, diff resumes next sync
    ```
-   and skip to step 4.
+   and skip to step 4. **This suppresses the changelog entries only — not S4.** Carry the `removed`
+   list forward as usual; S4 step 5 still writes tombstones for anything that appeared in a fence.
+   A realigned baseline is exactly when a reader most needs to know a module left deliberately.
 4. **Append a draft block** to `doc/changelog.txt`. This file is user-owned, so mark the block clearly as an editable draft. Use the existing `Date | Change | Description` line style:
    ```
    [TODAY'S DATE] | Auto-draft (review/edit) | [Added] <label> (<source_file>) ; [Removed] <label> (<source_file>)
    ```
    List the most significant added/removed nodes (cap ~10 each to stay readable). If nothing structural changed, write one line noting "no structural changes detected."
-5. **Update the baseline** for next time. Use the **Read tool** on `graphify-out/graph.json` and the
-   **Write tool** to `graphify-out/graph.prev.json` — not a shell `cp`, which does not exist in cmd
-   and must never silently no-op.
+5. Delete `graphify-out/.forge_diff.py`. The baseline was already refreshed by the script — there is
+   no separate copy step.
 
 Keep the `removed` list in memory — Step S4 uses it for tombstones.
 
@@ -261,6 +364,8 @@ from pathlib import Path
 from networkx.readwrite import json_graph
 
 # forge:shared-block graph-loader
+DOC_SUFFIXES = {".md", ".mdx", ".qmd", ".skill"}
+
 data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
 G = json_graph.node_link_graph(data, edges='links')
 
@@ -272,6 +377,26 @@ def label_of(n):
 def src_of(n):
     s = G.nodes[n].get('source_file')
     return s.replace("\\", "/") if s else None
+
+
+def is_doc(n):
+    # S2.5 already dropped these, but the post-commit hook's `graphify update`
+    # re-adds them on the next commit — so filter at read time too. file_type
+    # alone is not enough: with an LLM backend the semantic pass mints
+    # file_type="code" nodes for symbols surfaced from inside a doc.
+    ft = G.nodes[n].get('file_type')
+    if ft is not None and ft != 'code':
+        return True
+    s = src_of(n)
+    return s is not None and Path(s).suffix.lower() in DOC_SUFFIXES
+
+
+# Drop doc nodes from the GRAPH, not just from the node list. Filtering membership
+# alone leaves their edges in place, so G.degree() still counts references from
+# markdown (inflating degree, hiding orphans, skewing the god-node cut) and
+# G.neighbors() still yields them (making a dead file look referenced). No-op when
+# S2.5 already pruned; load-bearing when it has not.
+G = G.subgraph([n for n in G.nodes() if not is_doc(n)])
 # /forge:shared-block graph-loader
 
 nodes = [n for n in G.nodes() if src_of(n)]
@@ -288,16 +413,46 @@ degs = sorted((G.degree(n) for n in nodes), reverse=True)
 med = degs[len(degs) // 2] if degs else 0
 cut = max(degs[max(0, len(degs) // 10 - 1)] if degs else 0, 3 * med, 5)
 gods = [n for n in nodes if G.degree(n) >= cut]
+
+# Dead FILES. `degree <= 1` structurally cannot catch these: a module node earns
+# degree from `contains` edges to its own symbols, so a wholly unreferenced file
+# still scores >= 2. The signal is EXTERNAL degree — an edge leaving the file.
+TEST_HINTS = ('tests/', 'test/', 'spec/', '/test_', '/spec_')
+by_file = defaultdict(set)
+for n in nodes:
+    by_file[src_of(n)].add(n)
+
+
+def is_test_path(s):
+    low = '/' + s.lower()
+    name = low.rsplit('/', 1)[-1]
+    return (any(h in low for h in TEST_HINTS)
+            or name.startswith('test_') or name.startswith('spec_')
+            or '_test.' in name or '_spec.' in name)
+
+
+dead_files = []
+for s, members in by_file.items():
+    if is_test_path(s):
+        continue          # HARD GUARD: tests are never delete-listed
+    external = any(
+        src_of(nb) != s
+        for n in members for nb in G.neighbors(n)
+        if src_of(nb)
+    )
+    if not external:
+        dead_files.append(s)
+dead_files.sort()
 # /forge:shared-block bloat-buckets
 
-print(f"BLOAT {len(orphans)} {len(dups)} {len(gods)}")
+print(f"BLOAT {len(orphans)} {len(dups)} {len(gods)} {len(dead_files)}")
 ```
 
 ```bash
 [PYTHON_CMD] graphify-out/.forge_bloat.py
 ```
 
-Carry the three numbers into the S5 report, then delete the script. Best-effort — if it fails, omit
+Carry the four numbers into the S5 report, then delete the script. Best-effort — if it fails, omit
 the line rather than blocking the sync.
 
 ### Step S4: Fence-Aware Merge
@@ -329,7 +484,8 @@ For each doc file that has `<!-- graphify:auto start:... -->` markers (v2 set:
    - Keep all content outside the markers exactly as-is
    - If S2.5 could not re-cluster, omit the community lines rather than emitting stale ids
 5. **Tombstones**: if a node from the S3.5 `removed` list appeared in this fence's PREVIOUS
-   content, append at the end of the new fence content:
+   content, append at the end of the new fence content. This runs even when S3.5 step 3 took the
+   `Baseline realigned` path — that branch suppresses changelog *entries*, never tombstones.
    ```
    <!-- graphify:removed: <label> (last seen: YYYY-MM-DD) -->
    ```
@@ -347,6 +503,7 @@ Print a summary of what changed:
 
 Graph rebuilt: [N] nodes, [M] edges
   Pruned: [N] stale node(s) from [M] deleted file(s)   [omit if none]
+  Dropped: [N] non-code node(s) (docs)                 [omit if none]
 Docs refreshed:
   doc/architecture.md   — [N] sections updated
   doc/domain-model.md   — [N] sections updated
@@ -356,13 +513,13 @@ Changelog draft (doc/changelog.txt):
   [+N added, -M removed] structural changes drafted — review/edit the auto-draft block
 Tombstones: [N] removed modules marked <!-- graphify:removed --> in doc fences
 
-Bloat signal: [N] orphan nodes, [M] duplicate labels, [K] god nodes
+Bloat signal: [N] orphan nodes, [M] duplicate labels, [K] god nodes, [D] dead file(s)
   → run /forge-audit for the confirmed list
 
 User content: untouched (all content outside <!-- graphify:auto --> preserved)
 ```
 
-If all three bloat counts are zero, print `Bloat signal: clean` instead. These are graph pointers,
+If all four bloat counts are zero, print `Bloat signal: clean` instead. These are graph pointers,
 not findings — say so if the user reacts to them. `/forge-audit` confirms each against real source
 before anything is called bloat.
 
