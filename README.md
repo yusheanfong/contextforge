@@ -77,7 +77,7 @@ No plugin system involved — the four skill directories are plain files.
 ```bash
 git clone --depth 1 https://github.com/yusheanfong/contextforge /tmp/contextforge
 mkdir -p ~/.claude/skills
-cp -R /tmp/contextforge/.claude/skills/. ~/.claude/skills/
+cp -R /tmp/contextforge/skills/. ~/.claude/skills/
 rm -rf /tmp/contextforge
 ```
 
@@ -86,7 +86,7 @@ rm -rf /tmp/contextforge
 ```bash
 git clone --depth 1 https://github.com/yusheanfong/contextforge /tmp/contextforge
 mkdir -p .claude/skills
-cp -R /tmp/contextforge/.claude/skills/. .claude/skills/
+cp -R /tmp/contextforge/skills/. .claude/skills/
 rm -rf /tmp/contextforge
 ```
 
@@ -104,7 +104,7 @@ each skill dir precisely so one skill works standalone (see [For Maintainers](#f
 ```bash
 git clone --depth 1 https://github.com/yusheanfong/contextforge /tmp/contextforge
 mkdir -p ~/.claude/skills
-cp -R /tmp/contextforge/.claude/skills/forge-orchestrate ~/.claude/skills/
+cp -R /tmp/contextforge/skills/forge-orchestrate ~/.claude/skills/
 rm -rf /tmp/contextforge
 ```
 
@@ -652,7 +652,15 @@ The repo root doubles as both the marketplace and the single plugin it publishes
 | File | Role |
 |---|---|
 | `.claude-plugin/marketplace.json` | Marketplace `contextforge`, one entry whose `source` is `"./"` — the repo root *is* the plugin. Metadata only; no component paths, or Claude Code errors with `conflicting manifests` |
-| `.claude-plugin/plugin.json` | Plugin manifest. `"skills": ["./.claude/skills/"]` points at the existing skills tree, so the working tree still loads them as project-level skills for live editing — no `skills/` copy to keep in sync |
+| `.claude-plugin/plugin.json` | Plugin manifest. Metadata only, no component paths — the skills live in `skills/`, which Claude Code scans by default |
+
+**The skills live in `skills/`, not `.claude/skills/`.** Both work as a plugin source, but
+`.claude/skills/` is *also* where Claude Code looks for project-level skills, so developing here
+loaded every skill twice: once bare from the working tree, once namespaced from the plugin. Moving
+the tree to `skills/` leaves exactly one copy. The cost is that edits here no longer take effect
+until they are pushed and pulled back with `claude plugin update contextforge@contextforge` — to
+iterate faster, copy the one skill you are editing into `.claude/skills/` temporarily and delete it
+when done.
 
 **`version` is deliberately absent from both files.** Claude Code then falls back to the git commit
 SHA, so every pushed commit registers as a new version and installs pick it up. Adding a `version`
@@ -692,8 +700,8 @@ Two constraints that are not negotiable:
 Verify after editing any of them:
 
 ```bash
-grep -rn "forge:shared-block" .claude          # every marker — copies come in pairs
-grep -rn "\.\./[a-z-]*/references" .claude     # must be empty — no cross-skill reads
+grep -rn "forge:shared-block" skills           # every marker — copies come in pairs
+grep -rn "\.\./[a-z-]*/references" skills      # must be empty — no cross-skill reads
 ```
 
 (A bare `../` search is useless here: `worktree-mode.md` legitimately contains `../<repo>-st<i>`

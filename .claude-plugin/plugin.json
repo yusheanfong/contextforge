@@ -8,6 +8,5 @@
   "homepage": "https://github.com/yusheanfong/contextforge",
   "repository": "https://github.com/yusheanfong/contextforge",
   "license": "MIT",
-  "keywords": ["knowledge-graph", "context", "documentation", "orchestration", "code-audit"],
-  "skills": ["./.claude/skills/"]
+  "keywords": ["knowledge-graph", "context", "documentation", "orchestration", "code-audit"]
 }
