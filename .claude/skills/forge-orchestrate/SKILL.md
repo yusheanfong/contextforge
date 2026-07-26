@@ -367,6 +367,11 @@ result as `pass` / `fail` / `skipped (reason)`:
    `go vet`. (checklist: "linting and code style enforcement")
 2. **Tests** — e.g. `npm test`, `pytest`, `go test ./...`, `dotnet test`. MUST pass before commit.
    (checklist: "tests run before allowing merge", "functional tests")
+   - **A collection/import error is not a missing runner.** In a manifest-less repo `pytest` often
+     dies with `ModuleNotFoundError: No module named 'src'` because nothing put the repo root on
+     `sys.path`. That is a `fail` to report, not a `skipped` — the runner exists and ran. Retry once
+     with `PYTHONPATH=.` (or note that the repo needs a root `conftest.py`) before concluding
+     anything about the code under test.
    - **If NO test runner is detected at all** — after checking PATH, not just the manifests: the
      subtask's success criterion cannot be verified.
      Do NOT record a `pass` and do NOT silently commit. Warn loudly and ask once:
