@@ -28,15 +28,46 @@ branch that needs them (progressive disclosure: a single-tree run never reads th
 instructions, a project with no task list never reads the tick rules).
 
 There is **no `.claude/commands/` directory** — a skill is already a slash command. `user-invocable`
-defaults to `true`, so each one appears in the `/` menu as `/forge-<name>`. The `description` also
-lets Claude reach for it on intent: "sweep this repo for dead code" gets you `/forge-audit` without
-typing the slash.
+defaults to `true`, so each one appears in the `/` menu (as `/contextforge:forge-<name>` via the
+plugin, or `/forge-<name>` if you copy the files). The `description` also lets Claude reach for it on
+intent: "sweep this repo for dead code" gets you `/forge-audit` without typing the slash.
 
 **Coming from a pre-skill install?** These skills do not upgrade your old
-`~/.claude/commands/forge-*.md` files — reinstall from the block below, then delete the stale
+`~/.claude/commands/forge-*.md` files — install from the block below, then delete the stale
 commands: see [Upgrading from a pre-skill install](#upgrading-from-a-pre-skill-install).
 
-### Install everything (recommended)
+### Install as a plugin (recommended)
+
+This repo is also a Claude Code **plugin marketplace**. Two commands inside Claude Code:
+
+```
+/plugin marketplace add https://github.com/yusheanfong/contextforge.git
+/plugin install contextforge@contextforge
+```
+
+All four skills arrive together, in every project, and stay in sync with this repo — see
+[Updating](#updating).
+
+The shorthand `/plugin marketplace add yusheanfong/contextforge` also works, but it clones over
+**SSH** by default, so it fails without a GitHub SSH key. Use the full HTTPS URL above, or set
+`CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` before using the shorthand.
+
+**Names are namespaced.** Plugin skills carry the plugin name, so they appear as:
+
+```
+/contextforge:forge-contextmap
+/contextforge:forge-orchestrate
+/contextforge:forge-audit
+/contextforge:forge-diagnose
+```
+
+Bare `/forge-audit` won't autocomplete after a plugin install. Intent still works — "sweep this repo
+for dead code" reaches `/forge-audit` without typing anything. Where this README and the skills
+themselves say "run `/forge-contextmap` first", they mean `/contextforge:forge-contextmap`.
+
+### Manual install (copy the skills)
+
+No plugin system involved — the four skill directories are plain files.
 
 **Global** — available in all projects:
 
@@ -60,10 +91,12 @@ rm -rf /tmp/contextforge
 > (`.claude/skills/`)** when both define the same name — the reverse of how `settings.json`
 > precedence works. Install globally *or* per-project, not both, or the project copy is dead weight.
 
+Copied skills keep their bare `/forge-*` names — no `contextforge:` prefix.
+
 ### Install one only
 
-Supported — every shared block is duplicated inside each skill dir precisely so one skill works
-standalone (see [For Maintainers](#for-maintainers)):
+Manual install only; the plugin ships all four. Supported — every shared block is duplicated inside
+each skill dir precisely so one skill works standalone (see [For Maintainers](#for-maintainers)):
 
 ```bash
 git clone --depth 1 https://github.com/yusheanfong/contextforge /tmp/contextforge
@@ -76,16 +109,35 @@ Start with **`forge-contextmap`** regardless — the others depend on the graph 
 
 ### Updating
 
-Re-run the install block; `cp -R` overwrites in place.
+**Plugin install:** the plugin declares no pinned `version`, so every commit pushed here counts as a
+new version and Claude Code's background refresh picks improvements up on its own. To pull them
+immediately:
+
+```
+/plugin marketplace update contextforge
+/plugin update contextforge
+```
+
+**Manual install:** re-run the install block; `cp -R` overwrites in place.
+
+### Switching from a manual install to the plugin
+
+Delete the copied skills after installing the plugin, or the same four show up twice — once bare,
+once as `contextforge:*`:
+
+```bash
+rm -rf ~/.claude/skills/forge-*      # global copy
+rm -rf .claude/skills/forge-*        # per-project copy, run inside that project
+```
 
 ### Upgrading from a pre-skill install
 
 Older versions shipped all four as single files in `~/.claude/commands/` — `forge-contextmap.md`,
-`forge-orchestrate.md`, `forge-audit.md`, `forge-diagnose.md`. **Nothing auto-upgrades.** Copying the
-skills tree does not remove them, and stale copies of the same `/forge-*` names are confusing at
-best.
+`forge-orchestrate.md`, `forge-audit.md`, `forge-diagnose.md`. **Nothing auto-upgrades.** Neither the
+plugin nor a copied skills tree removes them, and stale copies of the same `/forge-*` names are
+confusing at best.
 
-Reinstall with the block above, then clear the old commands out:
+Install by either method above, then clear the old commands out:
 
 ```bash
 rm -f ~/.claude/commands/forge-*.md
@@ -95,6 +147,15 @@ Installs from before the `forge-` rename also have `contextmap.md`, `orchestrate
 — remove those by name only. A bare glob would hit commands you wrote yourself.
 
 ### Uninstall
+
+**Plugin install:**
+
+```
+/plugin uninstall contextforge
+/plugin marketplace remove contextforge
+```
+
+**Manual install:**
 
 ```bash
 rm -rf ~/.claude/skills/forge-*
@@ -571,7 +632,27 @@ Not all code is equally important. God nodes are the concepts with the most conn
 
 ## For Maintainers
 
-*(Shared blocks. Requirements are under [Install](#requirements).)*
+*(Plugin packaging, then shared blocks. Requirements are under [Install](#requirements).)*
+
+### Plugin packaging
+
+The repo root doubles as both the marketplace and the single plugin it publishes:
+
+| File | Role |
+|---|---|
+| `.claude-plugin/marketplace.json` | Marketplace `contextforge`, one entry whose `source` is `"./"` — the repo root *is* the plugin. Metadata only; no component paths, or Claude Code errors with `conflicting manifests` |
+| `.claude-plugin/plugin.json` | Plugin manifest. `"skills": ["./.claude/skills/"]` points at the existing skills tree, so the working tree still loads them as project-level skills for live editing — no `skills/` copy to keep in sync |
+
+**`version` is deliberately absent from both files.** Claude Code then falls back to the git commit
+SHA, so every pushed commit registers as a new version and installs pick it up. Adding a `version`
+string pins users until you bump it. `claude plugin validate .` warns about the missing field —
+that warning is expected.
+
+Verify a change to either manifest with `claude plugin validate .` (schema) followed by
+`claude plugin details contextforge` (component inventory — must list all four skills; `validate`
+alone passes even when the skills path resolves to nothing).
+
+### Shared blocks
 
 Each skill installs standalone, so a skill can never read a file from a sibling skill's directory —
 that would dangle for anyone who installed only one. A handful of blocks are therefore **duplicated

@@ -1,0 +1,15 @@
+{
+  "name": "contextforge",
+  "owner": {
+    "name": "Fong Yu Shean",
+    "url": "https://github.com/yusheanfong"
+  },
+  "description": "Four Claude Code skills that share one live knowledge graph: scaffold docs, execute features, audit for bloat, diagnose bugs.",
+  "plugins": [
+    {
+      "name": "contextforge",
+      "source": "./",
+      "description": "Graph-powered context scaffold, feature orchestrator, over-engineering audit, and root-cause diagnosis — four skills reading one knowledge graph."
+    }
+  ]
+}
