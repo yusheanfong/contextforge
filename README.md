@@ -38,18 +38,21 @@ commands: see [Upgrading from a pre-skill install](#upgrading-from-a-pre-skill-i
 
 ### Install as a plugin (recommended)
 
-This repo is also a Claude Code **plugin marketplace**. Two commands inside Claude Code:
+This repo is also a Claude Code **plugin marketplace**. Two commands in your terminal:
 
+```bash
+claude plugin marketplace add https://github.com/yusheanfong/contextforge.git
+claude plugin install contextforge@contextforge
 ```
-/plugin marketplace add https://github.com/yusheanfong/contextforge.git
-/plugin install contextforge@contextforge
-```
+
+Or the same two inside a Claude Code session, as `/plugin marketplace add …` and
+`/plugin install contextforge@contextforge`.
 
 All four skills arrive together, in every project, and stay in sync with this repo — see
 [Updating](#updating).
 
-The shorthand `/plugin marketplace add yusheanfong/contextforge` also works, but it clones over
-**SSH** by default, so it fails without a GitHub SSH key. Use the full HTTPS URL above, or set
+The shorthand `yusheanfong/contextforge` also works in place of the URL, but it clones over **SSH**
+by default, so it fails without a GitHub SSH key. Use the full HTTPS URL above, or set
 `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` before using the shorthand.
 
 **Names are namespaced.** Plugin skills carry the plugin name, so they appear as:
@@ -113,13 +116,16 @@ Start with **`forge-contextmap`** regardless — the others depend on the graph 
 new version and Claude Code's background refresh picks improvements up on its own. To pull them
 immediately:
 
-```
-/plugin marketplace update contextforge
-/plugin update contextforge@contextforge
+```bash
+claude plugin marketplace update contextforge
+claude plugin update contextforge@contextforge
 ```
 
-Use the qualified `contextforge@contextforge` for the second command — the bare plugin name fails
-with `Plugin "contextforge" not found`. Claude Code restarts to apply the update.
+Use the qualified `contextforge@contextforge` for the second command. The bare plugin name fails
+with `Failed to update plugin "contextforge": Plugin "contextforge" not found`, even though
+`claude plugin details contextforge` resolves it. Restart Claude Code to apply the update.
+
+The in-session equivalents are `/plugin marketplace update contextforge` and `/plugin update`.
 
 **Manual install:** re-run the install block; `cp -R` overwrites in place.
 
@@ -153,9 +159,9 @@ Installs from before the `forge-` rename also have `contextmap.md`, `orchestrate
 
 **Plugin install:**
 
-```
-/plugin uninstall contextforge
-/plugin marketplace remove contextforge
+```bash
+claude plugin uninstall contextforge
+claude plugin marketplace remove contextforge
 ```
 
 **Manual install:**
@@ -167,7 +173,9 @@ rm -f ~/.claude/commands/forge-*.md   # only if you ever used a pre-skill instal
 
 ### Requirements
 
-- Claude Code (any version)
+- Claude Code. Any version for the manual install — the skills themselves use no version-gated
+  features. The **plugin** install additionally needs a build with plugin support: run
+  `claude plugin --help` and check that `marketplace` is listed. Verified on 2.1.220.
 - Python 3.10+ — for existing-project analysis, `/forge-contextmap sync`, `/forge-orchestrate`, and
   `/forge-audit` (all read the graph). **Not** required for new-project scaffolding.
   `/forge-contextmap` installs Graphify automatically when it needs it.
