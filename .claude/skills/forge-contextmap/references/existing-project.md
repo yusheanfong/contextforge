@@ -120,36 +120,38 @@ networkx.
 
 ### Step E3: Analyze Codebase
 
-Run **both** commands resolved in E2.5, in this order:
+Three commands, in this order:
 
-1. The `build=` command — full AST extraction.
-2. The `update=` command — immediately after.
-
-Then run the prune script from `references/sync.md` Step S2.5 (write it, run it, delete it — do not
-duplicate the script here).
+1. The `build=` command resolved in E2.5 — full AST extraction.
+2. The prune script from `references/sync.md` Step S2.5 (write it, run it, delete it — do not
+   duplicate the script here).
+3. **`graphify cluster-only .`** — append **`--no-label`** when no LLM backend is configured (the
+   same condition that put `--code-only` on `build=`). This is what writes `GRAPH_REPORT.md`.
 
 This will take time depending on codebase size. Wait for each to complete. Together they produce:
-- `graphify-out/graph.json` — the knowledge graph, code-only after the prune
+- `graphify-out/graph.json` — the knowledge graph, code-only
 - `graphify-out/GRAPH_REPORT.md` — human-readable summary
 
-If either fails, print the error and ask the user to check their Graphify installation.
+If any step fails, print the error and ask the user to check their Graphify installation.
 
-> **Why `update` runs here too.** `build=` alone does **not** write `GRAPH_REPORT.md`.
-> `graphify extract --code-only` finishes with
+> **`build=` alone does not write `GRAPH_REPORT.md`.** `graphify extract --code-only` finishes with
 > `next: run 'graphify cluster-only <path>' to generate GRAPH_REPORT.md` — and stops. E4 below and
-> CLAUDE.md Rule 1 both tell readers to open that file, so without this step the very first session
-> after scaffolding hits a missing file. `graphify update` writes it as a side effect. Use that
-> rather than `cluster-only`, which does LLM community naming by default and stalls on a box with no
-> API key.
+> CLAUDE.md Rule 1 both tell readers to open that file, so without step 3 the very first session
+> after scaffolding hits a missing file.
 >
-> On graphify 0.9.26 the extra `update` is otherwise a no-op: measured on a Python repo, the node and
-> edge sets after `build` and after `build → update → prune` are byte-identical. It is cheap
-> insurance, not a rewrite.
+> **`graphify update` is NOT a substitute — do not use it here.** It short-circuits on an unchanged
+> graph: `[graphify watch] No code-graph topology changes detected; outputs left untouched.` Straight
+> after a fresh `extract` nothing *has* changed, so it writes no report. It only appears to work on a
+> repo that already contains markdown, because then `update` adds doc nodes, topology changes, and
+> the report gets written as a side effect — which is the contamination this skill exists to prevent.
+> On a pure-code repo it silently does nothing.
 >
-> **The prune is the part that matters for stability.** `graphify update` has no `--code-only`, so it
-> indexes the markdown this skill is about to write. Without the prune, sync #1 sees a graph 60%
-> larger than the one the docs were generated from and rewrites every fence. With it, E3 and every
-> later sync produce the same graph identity — verified idempotent across three consecutive runs.
+> **`--no-label` is what keeps `cluster-only` safe.** Bare `cluster-only` runs LLM community naming
+> and stalls on a box with no API key. With `--no-label` it re-clusters locally and leaves
+> `Community N` placeholders — correct, just unnamed.
+>
+> **Prune runs before cluster-only**, so the report and the community ids describe the same graph the
+> doc fences will.
 
 **Scope the corpus with `.graphifyignore` before the first build.** Graphify honors a
 `.graphifyignore` file at the repo root using gitignore syntax. Vendored code, generated bridges,

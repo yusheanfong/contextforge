@@ -140,6 +140,11 @@ MAX_DROP_RATIO = 0.9
 # from a user's .txt corpus.
 DOC_SUFFIXES = {".md", ".mdx", ".qmd", ".skill"}
 
+# file_type values that can ONLY come from a non-code file. `concept` and
+# `rationale` are deliberately NOT here: graphify mints them from Python
+# docstrings too, and those are code-derived content worth keeping in the graph.
+DOC_TYPES = {"document", "paper", "image"}
+
 graph_path = Path(sys.argv[1] if len(sys.argv) > 1 else "graphify-out/graph.json").resolve()
 # graph.json lives at <repo-root>/graphify-out/graph.json — source_file values are
 # repo-root-relative, so resolve against the root, not the cwd.
@@ -157,10 +162,15 @@ def src_of(n):
 
 
 def is_doc(n):
-    # file_type alone is NOT sufficient: with an LLM backend the semantic pass mints
-    # file_type="code" nodes for symbols surfaced from inside a doc. Check the suffix too.
-    ft = n.get("file_type")
-    if ft is not None and ft != "code":
+    """True when the node came from a documentation FILE.
+
+    Keyed on the source file, not on file_type, because both directions are wrong:
+      - a doc-sourced node can be file_type="code" (with an LLM backend the semantic
+        pass mints code-typed nodes for symbols surfaced from inside a .md), and
+      - a code-sourced node can be file_type="rationale" (a Python module docstring).
+    Only document/paper/image are unambiguous on their own.
+    """
+    if n.get("file_type") in DOC_TYPES:
         return True
     s = src_of(n)
     # .lower() is load-bearing: macOS is case-insensitive, so README.MD is a real
@@ -380,9 +390,11 @@ def src_of(n):
 
 
 def is_doc(n):
-    # S2.5 already dropped these, but the post-commit hook's `graphify update`
-    # re-adds them on the next commit — so filter at read time too. file_type
-    # alone is not enough: with an LLM backend the semantic pass mints
+    # Deliberately STRICTER than S2.5's prune: the buckets below count auditable
+    # code symbols, and a docstring-derived `rationale` node is not one — it would
+    # land in ORPHANS as permanent noise. S2.5 keeps those in graph.json (they are
+    # real code-derived content for the fences); this drops them from the counts.
+    # Suffix check is still needed: with an LLM backend the semantic pass mints
     # file_type="code" nodes for symbols surfaced from inside a doc.
     ft = G.nodes[n].get('file_type')
     if ft is not None and ft != 'code':

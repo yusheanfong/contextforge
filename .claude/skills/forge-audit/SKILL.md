@@ -123,9 +123,11 @@ def src_of(n):
     return s.replace("\\", "/") if s else None
 
 def is_doc(n):
-    # S2.5 already dropped these, but the post-commit hook's `graphify update`
-    # re-adds them on the next commit — so filter at read time too. file_type
-    # alone is not enough: with an LLM backend the semantic pass mints
+    # Deliberately STRICTER than S2.5's prune: the buckets below count auditable
+    # code symbols, and a docstring-derived `rationale` node is not one — it would
+    # land in ORPHANS as permanent noise. S2.5 keeps those in graph.json (they are
+    # real code-derived content for the fences); this drops them from the counts.
+    # Suffix check is still needed: with an LLM backend the semantic pass mints
     # file_type="code" nodes for symbols surfaced from inside a doc.
     ft = G.nodes[n].get('file_type')
     if ft is not None and ft != 'code':
