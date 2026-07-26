@@ -115,8 +115,11 @@ immediately:
 
 ```
 /plugin marketplace update contextforge
-/plugin update contextforge
+/plugin update contextforge@contextforge
 ```
+
+Use the qualified `contextforge@contextforge` for the second command — the bare plugin name fails
+with `Plugin "contextforge" not found`. Claude Code restarts to apply the update.
 
 **Manual install:** re-run the install block; `cp -R` overwrites in place.
 
