@@ -18,8 +18,19 @@ For each parallel subtask `i` in the batch, the MAIN session creates an isolated
 sub-branch off `[BRANCH]`:
 
 ```bash
-git worktree add ../<repo>-st<i> -b [BRANCH]/st<i> [BRANCH]
+git worktree add ../<repo>-st<i> -b [BRANCH]-st<i> [BRANCH]
 ```
+
+The sub-branch is `[BRANCH]-st<i>`, with a **hyphen** — not `[BRANCH]/st<i>`. Git refs are
+filesystem paths, so `refs/heads/[BRANCH]` cannot be a file and a directory at once: with `[BRANCH]`
+already created in Phase 2, the slash form fails outright with `cannot lock ref … exists; cannot
+create …` and the whole parallel path dies at dispatch. The hyphen makes each sub-branch a sibling
+ref instead of a child, which is what lets this run at all. The worktree *directory* keeps its
+`-st<i>` suffix for the unrelated reason that it reads well next to the repo.
+
+If `git worktree add` fails with `'…' already exists`, that directory is a leftover from an
+interrupted run. Report the path and let the user clear it — do not delete a directory you did not
+create.
 
 Then dispatch worker `i` with its payload (Phase 3) **plus** the absolute worktree path, instructing
 it: "Make ALL edits and run ALL commands under `<worktree abs path>` — that is your isolated
@@ -59,7 +70,7 @@ sub-branch back into `[BRANCH]`, **one at a time** (serialized — merges share 
 
 ```bash
 git checkout [BRANCH]
-git merge --no-ff [BRANCH]/st<i> -m "merge [BRANCH]/st<i>: [subtask summary]"
+git merge --no-ff [BRANCH]-st<i> -m "merge [BRANCH]-st<i>: [subtask summary]"
 ```
 
 - **Conflict on merge** = two subtasks really did edit the same lines. This is now a *visible, real*
@@ -75,8 +86,11 @@ Remove every worktree and delete its merged sub-branch:
 
 ```bash
 git worktree remove ../<repo>-st<i>
-git branch -d [BRANCH]/st<i>
+git branch -d [BRANCH]-st<i>
 ```
+
+Order matters: remove the worktree **before** deleting its branch. Git refuses to delete a branch
+that is checked out anywhere — `error: cannot delete branch '…' used by worktree at '…'`.
 
 Run `git worktree prune` to clear any stale entries. If a worktree won't remove because of
 uncommitted leftovers, report it rather than force-removing.
