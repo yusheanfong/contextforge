@@ -228,13 +228,8 @@ edit the current tree in place and the user commits later.
    If the tree is dirty, ASK before proceeding — stash (`git stash push -u`) or abort. Do not
    silently discard or commit the user's pending work.
 
-2. **Create + checkout the branch:**
-   ```bash
-   git checkout -b [BRANCH]
-   ```
-   If `[BRANCH]` already exists, check it out and note it.
-
-3. **Resolve the base branch as `[BASE]`:**
+2. **Resolve the base branch as `[BASE]`** — before the branch is created, because it is the branch's
+   start point:
 
    <!-- forge:shared-block base-branch -->
    Resolve the repository's base branch as `[BASE]`. It is `main` on some repos and `master` on
@@ -272,8 +267,47 @@ edit the current tree in place and the user commits later.
    with AskUserQuestion. Guessing here merges the work into the wrong branch.
    <!-- /forge:shared-block base-branch -->
 
-   If nothing resolves, print `ℹ️ Base branch not resolved — skipping the merge-conflict pre-check.`
-   and go to Phase 3. This check is a warning; never block a feature on it.
+   If nothing resolves, print `ℹ️ Base branch not resolved — branching from HEAD and skipping the
+   merge-conflict pre-check.`, then take the HEAD fallback in step 3 and skip step 4 entirely. Never
+   block a feature on this.
+
+3. **Create + checkout the branch, explicitly from `[BASE]`.** Probe first — `-b` fails hard when the
+   branch already exists, and re-running the same feature is normal:
+
+   ```bash
+   git rev-parse --verify --quiet refs/heads/[BRANCH]
+   ```
+
+   **Exit 0 — the branch already exists.** Check it out and note it. This is a rerun and its existing
+   commits are the point, so the start point is not reconsidered:
+
+   ```bash
+   git checkout [BRANCH]
+   ```
+
+   **Non-zero — new branch.** First check whether HEAD is carrying committed work that branching
+   from `[BASE]` would leave behind:
+
+   ```bash
+   git log --oneline [BASE]..HEAD
+   ```
+
+   Empty is the normal case — you are on `[BASE]`, or level with it. Create the branch without
+   asking:
+
+   ```bash
+   git checkout -b [BRANCH] [BASE]
+   ```
+
+   Not empty means HEAD has commits `[BASE]` doesn't, and there is no safe default: you are either
+   sitting on a stale branch by accident, or deliberately stacking this feature on another one. Ask
+   which, then use `git checkout -b [BRANCH] [BASE]` or bare `git checkout -b [BRANCH]` to match the
+   answer.
+
+   The start point is explicit on purpose. Bare `git checkout -b [BRANCH]` branches from HEAD, so
+   running `/forge-orchestrate` from an unrelated branch quietly drags that branch's commits into the
+   feature branch — and from there into `main` when `/forge-merge` lands it. They are real commits,
+   so nothing looks broken until they show up somewhere nobody reviewed them for.
 
 4. **Merge-conflict pre-check** vs `[BASE]` (checklist: "automated merge conflict detection").
    Best-effort throughout — a repo with no remote fails the fetch, which is fine:
