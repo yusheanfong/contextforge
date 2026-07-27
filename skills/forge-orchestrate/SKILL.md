@@ -26,7 +26,7 @@ writes (you review the working tree and commit yourself).
 Synthesis = final report + release-readiness.
 
 **Global state object** — track these across phases and surface them in the final report:
-`branch`, `subtasks[]` (goal, criterion, deps, independent, gate_set, status, commit_sha),
+`branch`, `subtasks[]` (goal, criterion, deps, independent, gate_set, status, agent_id, commit_sha),
 `gate_results`, `files_changed`, `commits[]`, `all_gates_pass`.
 
 **Reference files** — read each only when its branch applies, not up front:
@@ -347,8 +347,15 @@ edges. `NO_MATCH` means the graph has no node for these terms — fall back to t
 
 ### 3b. Doc slice
 
-From the `FILES` the slice returned, pick the matching domain docs and ALWAYS add the universal
-docs. Read only these — never the whole `doc/` set:
+**Pass paths, not text.** Workers have the Read tool, and the payload is routing — the same
+pointers-not-content rule the graph slice already follows. Do NOT read these docs and paste them in;
+a pasted doc set is ~2k *output* tokens per dispatch on a small project and more on a large one,
+re-emitted on every retry.
+
+List `doc/*.md` **once per run** (one glob, cached) so you know what actually exists. Then, from the
+`FILES` the slice returned, name the matching domain docs plus the universal ones — paths only, and
+only paths the glob confirmed. Naming a doc the project never scaffolded costs the worker a wasted
+turn on a failed Read.
 
 <!-- forge:shared-block source-doc-map -->
 - **Always:** `doc/architecture.md`, `doc/solution-structure.md`, `doc/coding-standard.md`, and
@@ -361,12 +368,29 @@ docs. Read only these — never the whole `doc/` set:
 - auth/token/permission/role sources → `doc/security.md`
 <!-- /forge:shared-block source-doc-map -->
 
+**One exception — paste `doc/design-brief.md` inline for UI subtasks.** It is about a page, and 5b's
+design check is the only one that hard-fails on a miss; that's cheaper than a re-loop.
+
+**What this means for the main session:** you never Read `architecture.md`, `solution-structure.md`
+or `coding-standard.md` at all, and you read `prd.md` only if Phase 5b's reviewer can't (it can —
+it reads its own). The one remaining on-demand read is Phase 0e's ambiguity scan, which fires only
+on a genuinely ambiguous request and once per run, not once per subtask.
+
 ### 3c. Instruction
 
 Assemble the worker prompt from: the subtask **goal** + **success criterion** + the graph slice
-(3a) + the doc slice text (3b) + these constraints, verbatim:
+(3a) + the doc paths (3b) + these constraints, verbatim. The read gate leads the block — it is a
+blocking precondition, not a footnote, and a worker that skims will still hit it first:
 
 ```
+FIRST — before writing any code, read these. They are the binding constraints for this subtask
+and you have not seen them:
+  [every path 3b selected AND the glob confirmed, one per line, each with a short what-it-is —
+   e.g. "doc/coding-standard.md  — language + framework conventions". Emit nothing for a doc
+   this project doesn't have.]
+Read doc/prd.md only if this subtask names a `Builds: Fn` reference above.
+Do not start editing until you have read them.
+
 - Edit only the files needed for THIS subtask.
 - Write/update tests and run them; report results.
 - Keep lint/style clean — match the project's existing conventions.
@@ -385,19 +409,21 @@ top-down and stop at the first rung that applies:
   5. "Installed dependency?" → use it
   6. "One line?" → one line
   7. Only then: the minimum that works
-Also:
-  - State any assumption you're making; if the subtask is genuinely unclear, report NEEDS_CONTEXT
-    rather than guessing.
-  - Surgical changes only — every changed line traces to THIS subtask. Don't refactor, reformat, or
-    "improve" adjacent code; match the existing style even if you'd do it differently.
-  - The success criterion is the definition of done — verify it (run the test/check), don't assume.
 GUARD: the ladder never applies to the tests Phase 4 mandates or to any file needed to satisfy the
 success criterion. Those are always required — never skip them as "YAGNI."
 ```
 
-> The ladder above is `forge:shared-block minimal-ladder`, in its **payload copy**. It must stay
-> literal text here — a worker subagent sees only its dispatch payload, never this file, so it can
-> never become a pointer to somewhere else.
+> The ladder above is `forge:shared-block minimal-ladder`, in its **payload copy**, and it has to
+> stay literal text: a worker sees its dispatch payload, never this file, so it can never become a
+> pointer. The ladder specifically — rungs 2–5 are the "don't reinvent what exists" half, and
+> `CLAUDE.md`'s *Simplicity First* does not cover them.
+>
+> The surrounding discipline bullets used to be restated here too and no longer are. Workers are
+> `general-purpose` subagents, and [every subagent except `Explore` and `Plan` loads the project's
+> `CLAUDE.md`](https://code.claude.com/docs/en/sub-agents) — so a ContextForge project's *Coding
+> Rules* (think-before-coding, surgical changes, goal-driven execution) already reach the worker
+> once, for free. Restating them cost ~90 output tokens on every dispatch and every retry. Two of
+> them also duplicated bullets already in this same payload.
 
 **If `[RULED_OUT]` exists** (diagnosis handoff), append it to the payload as: "Already ruled out by
 the diagnosis — do not re-investigate: [list]."
@@ -414,6 +440,10 @@ capable model for multi-file integration or design judgment.
 
 Each worker receives ONLY its payload from Phase 3 — not this session's history. Workers edit
 code + write tests + run them, and do **NOT** commit. Committing happens in Phase 5 after gates pass.
+
+**Record every dispatched worker's agent ID/name in its subtask state (`agent_id`).** 5c resumes
+that live agent instead of respawning it, and without the ID there is nothing to resume. This
+applies to both dispatch modes below.
 
 ### Dispatch mode — worktrees vs. single tree
 
@@ -479,49 +509,101 @@ result as `pass` / `fail` / `skipped (reason)`:
 6. **SAST** — `semgrep --error` if installed; else `skipped (semgrep not installed)`. (checklist:
    "SAST")
 
-### 5b. Review checks
+### 5b. Review checks — ONE read-only reviewer subagent
 
-1. **Spec compliance** — does the worker output do exactly what the subtask asked (nothing
-   missing, nothing extra)? If the subtask carries a `Builds: Fn` reference, check the diff
-   against that feature's line in `doc/prd.md`. If `[FROM_DIAGNOSIS]` is true, check the diff
-   against the handoff's §7 *Proposed fix* instead — including any design choice §7 explicitly
-   left to this session.
-2. **Quality** — only after spec passes — is it well-built (tests real, no obvious smell)?
-3. **Over-engineering** *(always runs)* — an over-engineering review pass on THIS worker's diff:
-   flag speculative abstractions, unrequested flexibility, reinvented stdlib/deps, and dead
-   scaffolding, and hand back a **delete-list**. Review criteria = the minimal-code ladder (walk it
-   top-down, stop at the first rung that applies):
-   <!-- forge:shared-block minimal-ladder -->
-   1. Does this need to exist? → shouldn't (YAGNI)
-   2. Already in this codebase? → should have reused it
-   3. Stdlib does it? → should have used it
-   4. Native platform feature? → should have used it
-   5. Installed dependency? → should have used it
-   6. One line? → should be one line
-   7. Only then: the minimum that works
-   <!-- /forge:shared-block minimal-ladder -->
-   **Run it from the MAIN session by default** (it can read this whole file, including the ladder).
-   If you instead dispatch a read-only reviewer subagent, its payload MUST restate the ladder above
-   as the review criteria — a subagent sees only its dispatch payload, not this file.
-   **Scope guard — never delete-list these:** the tests Phase 4 mandates, and any file needed to
-   satisfy the subtask's success criterion. Minimality never overrides the "workers must write
-   tests" rule.
-4. **Design compliance** *(UI subtasks only — skip when `doc/design-brief.md` doesn't exist)* —
-   scan the diff for style values: every color, font size, spacing, and radius must come from
-   `doc/design-brief.md` tokens, and components must be the brief's reusable ones. An ad-hoc hex
-   value, magic font size, or one-off component = review FAILURE routed through the same bounded
-   loop (5c) with the offending values listed. If the value is genuinely needed, the fix is to add
-   it to `design-brief.md` first (surface that to the user), not to hardcode it.
+All four checks run in a **single reviewer dispatch**, and the reviewer runs `git diff` **itself**.
+The diff never enters this session's context or its output. That matters because main-session
+tokens are recurring — paid again on every later turn — while a subagent's are discarded when it
+returns. Splitting the checks defeats it: any one of them left here drags the whole diff back in.
 
-Either dispatch a reviewer subagent (read-only) with the criterion + the worker's diff, or
-review directly.
+Assemble the reviewer payload from:
+
+- the subtask **goal** + **success criterion**
+- **the diff command**, with the right cwd for the dispatch mode (see below) and scoped to the files
+  the worker reported changing
+- the minimal-code ladder — paste the block below into the payload. A subagent sees only its
+  dispatch payload, never this file:
+  <!-- forge:shared-block minimal-ladder -->
+  1. Does this need to exist? → shouldn't (YAGNI)
+  2. Already in this codebase? → should have reused it
+  3. Stdlib does it? → should have used it
+  4. Native platform feature? → should have used it
+  5. Installed dependency? → should have used it
+  6. One line? → should be one line
+  7. Only then: the minimum that works
+  <!-- /forge:shared-block minimal-ladder -->
+- **Scope guard, verbatim:** never delete-list the tests Phase 4 mandates, or any file needed to
+  satisfy the subtask's success criterion. Minimality never overrides the "workers must write
+  tests" rule.
+- the four checks, each one line, the last two conditional:
+  1. **Spec compliance** — does the diff do exactly what the subtask asked, nothing missing and
+     nothing extra? If the subtask carries a `Builds: Fn` reference, add: "read `doc/prd.md` and
+     check the diff against feature Fn." If `[FROM_DIAGNOSIS]` is true, add instead: "read
+     `doc/diagnosis-<slug>.md` and check against its §7 *Proposed fix*, including any design choice
+     §7 explicitly left to this session."
+  2. **Quality** — only if spec passes — is it well-built (tests real, no obvious smell)?
+  3. **Over-engineering** *(always)* — walk the ladder top-down over the diff, stop at the first
+     rung that applies, and return a **delete-list**: speculative abstractions, unrequested
+     flexibility, reinvented stdlib/deps, dead scaffolding.
+  4. **Design compliance** *(only when the subtask is UI and `doc/design-brief.md` exists)* — "read
+     `doc/design-brief.md`. Every color, font size, spacing and radius in the diff must be one of
+     its tokens, and components must be its reusable ones."
+
+**Return contract** — this is all that enters this session, so keep it tight:
+
+```
+VERDICT: PASS | FAIL
+FAILURES:    one line each, or "none"
+DELETE-LIST: path:line — reason, or "clean"
+```
+
+`FAILURES` lines must name the **concrete offending values**, not just which check failed. 5b.4's
+escalation depends on it: you can only tell the user "add `#3B82F6` to `design-brief.md` first,
+don't hardcode it" if the reviewer reported the hex. A bare "design check failed" kills that path —
+and if the value is genuinely needed, adding it to the brief is the fix, never hardcoding.
+
+#### Where the reviewer runs `git diff`
+
+**Worktree mode** — the subtask's edits live in its own checkout, and a subagent starts in THIS
+session's cwd, not there. A bare `git diff` would come back empty and the reviewer would return
+`VERDICT: PASS` on nothing. Give it the absolute worktree path and have it use the `-C` form, the
+same way 5d stages:
+
+```bash
+git -C <worktree abs path> diff -- [exact files this worker reported]
+```
+
+No baseline problem here: the checkout is isolated and 5b runs before that worktree commits, so its
+working-tree diff is exactly this subtask's work.
+
+**Single-tree, commit mode** — 5d commits each subtask as it passes, so HEAD advances and a plain
+`git diff -- [files]` is already scoped to the current subtask.
+
+**Single-tree, `[NO_COMMIT]`** — nothing commits, so HEAD never moves and the working tree
+accumulates every subtask's changes. File scoping alone does not save this; 5d.3's collision rule
+exists precisely because two subtasks touching one file is expected. For any file in scope that an
+**earlier** subtask in this run also reported, append to the payload:
+
+```
+Out of scope — <path> also carries changes from an earlier subtask in this run
+("<that subtask's goal>"). Review only the hunks belonging to THIS subtask, and never
+delete-list the earlier work.
+```
+
+Omit that line when there is no overlap.
 
 ### 5c. Conditional routing loop (bounded)
 
 If any **gate** (5a) or **review check** (5b) FAILS, re-dispatch the SAME worker with the specific
-failures as an error log, and re-run 5a–5b. An over-engineering delete-list (5b.3) counts as a
-review failure — feed it back as the error log ("delete these, keep tests + success-criterion
-files") through this same loop; do not open a separate one.
+failures as an error log, and re-run 5a–5b. A non-empty delete-list counts as a review failure —
+feed it back as the error log ("delete these, keep tests + success-criterion files") through this
+same loop; do not open a separate one.
+
+**Re-dispatch means *resume*, not respawn.** Send the failures to the agent that is already alive —
+in Claude Code, `SendMessage` with the `agent_id` recorded in Phase 4. Its context is intact,
+including every file it read and every edit it made, so you send only the error log, not the
+payload. Spawn a fresh `Agent` **only** if that agent is gone; that path re-sends the whole payload
+and the worker has to re-read everything it already read.
 
 **Bounded loop: at most 3 iterations per subtask.** If still failing after 3, stop the loop and
 report it to the user — do not loop further.

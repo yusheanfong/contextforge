@@ -311,7 +311,7 @@ Check if `doc/` folder exists with existing doc files.
 
 For each doc file, use the fence format to mark graph-generated content. All content outside fences is either user-provided (preserved) or a placeholder prompt (for new files).
 
-**CLAUDE.md** — create or update. Use the SAME v2 template as `references/doc-templates.md` File 1 (including the `<!-- contextforge:format v2 -->` marker, v2 Doc Navigation, Rules 1–7, and all four Coding Rules blocks), with these differences:
+**CLAUDE.md** — create or update. Use the SAME v2 template as `references/doc-templates.md` File 1 (including the `<!-- contextforge:format v2 -->` marker, v2 Doc Navigation, Rules 1–8, and all four Coding Rules blocks), with these differences:
 
 - `## Goal` — Ask user: "What's the goal of this project?" if not already known from E5. Use their answer.
 - `## Tech Stack` — inferred from graph + user confirmation.

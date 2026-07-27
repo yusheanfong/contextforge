@@ -428,7 +428,7 @@ Flow:
 2. **Clarify only if ambiguous** — asks about scope/criteria only for a genuinely unclear request; otherwise states its assumptions and runs hands-off
 3. **Branch** — creates `feature/<slug>` and works there
 4. **Decompose** the task into subtasks (goal, success criterion, dependencies, gate set). Run with no arguments and it picks the next eligible task from the engineering plan — dependency-aware — and uses that task's own acceptance criteria as the success criteria
-5. **Graph slice per subtask** — reads `graph.json`, finds the touched nodes' community + neighborhood, and pulls only the matching `doc/*` files (plus the universal docs: architecture, structure, standards, and the PRD as scope guard). UI subtasks get `design-brief.md` + `app-flow.md`; data/API subtasks get `backend-schema.md` when it exists
+5. **Graph slice per subtask** — reads `graph.json`, walks the touched nodes' neighborhood (falling back to their community only when that comes back nearly empty), and hands the worker a ranked, capped file list plus the *paths* of the matching `doc/*` files (plus the universal docs: architecture, structure, standards, and the PRD as scope guard). Paths, not pasted text — the worker reads them itself. UI subtasks get `design-brief.md` + `app-flow.md`; data/API subtasks get `backend-schema.md` when it exists
 6. **Dispatch workers** — 2+ independent subtasks each run in an isolated **git worktree** (real parallelism, overlapping edits surface as a visible merge conflict); lone/dependent subtasks run single-tree
 7. **CI gates** — adaptive and honest: lint, tests, coverage, dependency-vuln, secrets (hard block), SAST, over-engineering. Runs what your project has, skips + *honestly reports* what it doesn't — never a fake green check
 8. **Bounded review loop** — spec (against the PRD feature the task `Builds:`), then quality, then an over-engineering pass, then **design compliance** on UI subtasks (every color/font/spacing in the diff must come from `design-brief.md` tokens — ad-hoc hex values fail review); max 3 iterations per subtask
@@ -782,7 +782,7 @@ inside Python). Edit one copy, update the rest:
 | `graphify-cli` | `skills/forge-contextmap/references/sync.md` S1.5 — **one copy, not duplicated.** Both consumers live in `forge-contextmap`, so `references/existing-project.md` E2.5 just points at it. Listed here because a second skill needing the CLI must copy it rather than reach across directories. |
 | `graph-loader` | `skills/forge-orchestrate/references/graph-slice.md` · `skills/forge-audit/SKILL.md` Phase 1 · `skills/forge-contextmap/references/sync.md` S3.6 |
 | `bloat-buckets` | `skills/forge-audit/SKILL.md` Phase 1 · `skills/forge-contextmap/references/sync.md` S3.6 — thresholds must match, or sync's counts disagree with audit's |
-| `minimal-ladder` | `skills/forge-orchestrate/SKILL.md` 3c (**payload copy**) · same file 5b.3 (review copy) · `skills/forge-audit/SKILL.md` Phase 2 |
+| `minimal-ladder` | `skills/forge-orchestrate/SKILL.md` 3c (**payload copy**) · same file 5b (review copy) · `skills/forge-audit/SKILL.md` Phase 2 |
 | `source-doc-map` | `skills/forge-orchestrate/SKILL.md` 3b · `skills/forge-contextmap/references/doc-templates.md` CLAUDE.md rule 1 |
 
 Two constraints that are not negotiable:
