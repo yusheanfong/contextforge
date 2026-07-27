@@ -384,10 +384,9 @@ blocking precondition, not a footnote, and a worker that skims will still hit it
 ```
 FIRST — before writing any code, read these. They are the binding constraints for this subtask
 and you have not seen them:
-  doc/architecture.md        — tech stack, layers, design patterns
-  doc/solution-structure.md  — folder layout you must follow exactly
-  doc/coding-standard.md     — language + framework conventions
-  [any domain docs 3b's routing map selected, same one-line form]
+  [every path 3b selected AND the glob confirmed, one per line, each with a short what-it-is —
+   e.g. "doc/coding-standard.md  — language + framework conventions". Emit nothing for a doc
+   this project doesn't have.]
 Read doc/prd.md only if this subtask names a `Builds: Fn` reference above.
 Do not start editing until you have read them.
 
