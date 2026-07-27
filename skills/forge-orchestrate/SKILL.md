@@ -408,19 +408,21 @@ top-down and stop at the first rung that applies:
   5. "Installed dependency?" → use it
   6. "One line?" → one line
   7. Only then: the minimum that works
-Also:
-  - State any assumption you're making; if the subtask is genuinely unclear, report NEEDS_CONTEXT
-    rather than guessing.
-  - Surgical changes only — every changed line traces to THIS subtask. Don't refactor, reformat, or
-    "improve" adjacent code; match the existing style even if you'd do it differently.
-  - The success criterion is the definition of done — verify it (run the test/check), don't assume.
 GUARD: the ladder never applies to the tests Phase 4 mandates or to any file needed to satisfy the
 success criterion. Those are always required — never skip them as "YAGNI."
 ```
 
-> The ladder above is `forge:shared-block minimal-ladder`, in its **payload copy**. It must stay
-> literal text here — a worker subagent sees only its dispatch payload, never this file, so it can
-> never become a pointer to somewhere else.
+> The ladder above is `forge:shared-block minimal-ladder`, in its **payload copy**, and it has to
+> stay literal text: a worker sees its dispatch payload, never this file, so it can never become a
+> pointer. The ladder specifically — rungs 2–5 are the "don't reinvent what exists" half, and
+> `CLAUDE.md`'s *Simplicity First* does not cover them.
+>
+> The surrounding discipline bullets used to be restated here too and no longer are. Workers are
+> `general-purpose` subagents, and [every subagent except `Explore` and `Plan` loads the project's
+> `CLAUDE.md`](https://code.claude.com/docs/en/sub-agents) — so a ContextForge project's *Coding
+> Rules* (think-before-coding, surgical changes, goal-driven execution) already reach the worker
+> once, for free. Restating them cost ~90 output tokens on every dispatch and every retry. Two of
+> them also duplicated bullets already in this same payload.
 
 **If `[RULED_OUT]` exists** (diagnosis handoff), append it to the payload as: "Already ruled out by
 the diagnosis — do not re-investigate: [list]."

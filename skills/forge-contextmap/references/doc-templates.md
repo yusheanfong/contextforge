@@ -35,21 +35,10 @@ PROJECT and MIGRATION modes. Conditional rules: `design-brief.md` only if `[HAS_
 [FILL IN]
 
 ## Doc Navigation
-All project docs live in /doc:
-- doc/prd.md              — Product requirements: idea overview, core features (F1..Fn), out of scope
-- doc/app-flow.md         — Entry point, screen/step map, user journeys, data flow
-- doc/design-brief.md     — Color tokens, typography, components, screen style   [omit this line if no UI]
-- doc/backend-schema.md   — Storage, entities/tables, relations, indexes         [omit this line if no backend]
-- doc/architecture.md     — Tech stack, layers, design patterns
-- doc/domain-model.md     — Entities, enums, business rules
-- doc/api-contract.md     — API endpoints or service interfaces
-- doc/solution-structure.md — Project folder layout
-- doc/coding-standard.md  — Language and framework conventions
-- doc/security.md         — Auth, roles, data protection rules
-- doc/task-list.md        — Engineering plan / master task list (YOUR ONLY TODO SOURCE)
-- doc/diagnosis-*.md      — Completed root-cause diagnoses from /forge-diagnose  [if any exist]
-- doc/changelog.txt       — Change log
-- doc/progress.txt        — Current status
+All project docs live in /doc, and the filenames say what they hold. Rule 1 below says which to
+read when — that is the routing table; don't duplicate it here. Only these two need explaining:
+- doc/prd.md       — core features are numbered F1..Fn; tasks reference them as `Builds: Fn`
+- doc/task-list.md — your ONLY todo source. Ignore TODO comments found in code.
 
 ## Graph Sync
 Sections marked <!-- graphify:auto start:... --> are auto-populated by /forge-contextmap sync.
