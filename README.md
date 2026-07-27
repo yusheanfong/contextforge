@@ -1,15 +1,16 @@
 # ContextForge
 
-Four Claude Code skills that share one live knowledge graph: scaffold the workflow, execute features against it, sweep it for bloat, and diagnose what breaks — all reading the same map of your codebase.
+Five Claude Code skills that share one live knowledge graph: scaffold the workflow, execute features against it, land them, sweep it for bloat, and diagnose what breaks — all reading the same map of your codebase.
 
 ```
 /forge-contextmap   → scaffold docs + build the graph   (start here)
 /forge-orchestrate  → execute a feature against the graph
+/forge-merge        → land the verified branch, prove it landed, delete it
 /forge-audit        → sweep the repo for over-engineering
 /forge-diagnose     → find root cause, change nothing, hand off
 ```
 
-`/forge-contextmap` is the entry point — `/forge-orchestrate` and `/forge-audit` hard-stop until it has built the graph. `/forge-diagnose` doesn't: it uses the graph when present and greps when not, so a bug is never blocked behind a graph build.
+`/forge-contextmap` is the entry point — `/forge-orchestrate` and `/forge-audit` hard-stop until it has built the graph. `/forge-diagnose` doesn't: it uses the graph when present and greps when not, so a bug is never blocked behind a graph build. `/forge-merge` doesn't either — it reasons about git refs, not code, so it runs in any git repo.
 
 ---
 
@@ -17,13 +18,13 @@ Four Claude Code skills that share one live knowledge graph: scaffold the workfl
 
 Claude Code starts every session cold. It reads `CLAUDE.md` (auto-loaded, ~600 tokens) to know what it's building. Generic placeholders mean generic decisions.
 
-ContextForge replaces those placeholders with architecture extracted from your actual code, then keeps four workflows — scaffold, execute, audit, diagnose — reading from that same extracted map instead of from whatever happens to be in the session's context window.
+ContextForge replaces those placeholders with architecture extracted from your actual code, then keeps five workflows — scaffold, execute, land, audit, diagnose — reading from that same extracted map instead of from whatever happens to be in the session's context window.
 
 ---
 
 ## Install
 
-All four are packaged as **skills** — a thin `SKILL.md` plus `references/` files loaded only on the
+All five are packaged as **skills** — a thin `SKILL.md` plus `references/` files loaded only on the
 branch that needs them (progressive disclosure: a single-tree run never reads the worktree
 instructions, a project with no task list never reads the tick rules).
 
@@ -48,7 +49,7 @@ claude plugin install contextforge@contextforge
 Or the same two inside a Claude Code session, as `/plugin marketplace add …` and
 `/plugin install contextforge@contextforge`.
 
-All four skills arrive together, in every project, and stay in sync with this repo — see
+All five skills arrive together, in every project, and stay in sync with this repo — see
 [Updating](#updating).
 
 The shorthand `yusheanfong/contextforge` also works in place of the URL, but it clones over **SSH**
@@ -60,6 +61,7 @@ by default, so it fails without a GitHub SSH key. Use the full HTTPS URL above, 
 ```
 /contextforge:forge-contextmap
 /contextforge:forge-orchestrate
+/contextforge:forge-merge
 /contextforge:forge-audit
 /contextforge:forge-diagnose
 ```
@@ -70,7 +72,7 @@ themselves say "run `/forge-contextmap` first", they mean `/contextforge:forge-c
 
 ### Manual install (copy the skills)
 
-No plugin system involved — the four skill directories are plain files.
+No plugin system involved — the five skill directories are plain files.
 
 **Global** — available in all projects:
 
@@ -98,7 +100,7 @@ Copied skills keep their bare `/forge-*` names — no `contextforge:` prefix.
 
 ### Install one only
 
-Manual install only; the plugin ships all four. Supported — every shared block is duplicated inside
+Manual install only; the plugin ships all five. Supported — every shared block is duplicated inside
 each skill dir precisely so one skill works standalone (see [For Maintainers](#for-maintainers)):
 
 ```bash
@@ -131,7 +133,7 @@ The in-session equivalents are `/plugin marketplace update contextforge` and `/p
 
 ### Switching from a manual install to the plugin
 
-Delete the copied skills after installing the plugin, or the same four show up twice — once bare,
+Delete the copied skills after installing the plugin, or the same five show up twice — once bare,
 once as `contextforge:*`:
 
 ```bash
@@ -186,7 +188,7 @@ rm -f ~/.claude/commands/forge-*.md   # only if you ever used a pre-skill instal
 
 ## The Loop
 
-The four skills share one graph and run in a loop:
+The five skills share one graph and run in a loop:
 
 ```
 Setup (once)          /forge-contextmap                   → scaffold docs + build graph + post-commit hook
@@ -194,7 +196,9 @@ Setup (once)          /forge-contextmap                   → scaffold docs + bu
 
 Per task (the loop)   /forge-orchestrate                  → no args: takes the next eligible task off
                                                             the plan and uses ITS acceptance criteria
-                      → review the diff → merge the branch
+                      → review the diff, then:
+                      /forge-merge                        → merge the branch into main/master, verify
+                                                            it fully landed, delete it
                       /forge-contextmap sync              → refresh doc fences + print the bloat signal
 
 Ad-hoc work           /forge-orchestrate <feature>        → same pipeline, spec typed by you
@@ -209,6 +213,7 @@ Periodic / on-demand  /forge-audit                        → whole-repo bloat s
 |---------|-------------|--------|-----|
 | `/forge-contextmap` | Starting out, or refreshing docs after code changes (`sync`) | `doc/*`, `graph.json`, post-commit hook | never commits |
 | `/forge-orchestrate <feature>` | Building a new feature end-to-end | code + tests, `release-readiness.md`, progress/changelog | commits per subtask on a branch (opt out with `--no-commit`) |
+| `/forge-merge [branch]` | You've reviewed an orchestrate branch and want it landed | nothing | one merge commit on `main`/`master`, then deletes the branch — never pushes |
 | `/forge-audit [path]` | Cleaning up accumulated bloat, before a refactor or release | nothing (report-only) | never commits |
 | `/forge-diagnose <issue>` | Something is broken and the fix will run in another session | `doc/diagnosis-<slug>.md` only | never commits |
 
@@ -221,7 +226,8 @@ isn't on the plan.
 **Sync comes *after* `/forge-orchestrate`, not before.** `/forge-orchestrate` updates `progress.txt`,
 `changelog.txt`, and `task-list.md` — but it does **not** refresh the `graphify:auto` doc fences.
 The post-commit hook rebuilds `graph.json` on every commit yet never writes docs. So run
-`/forge-contextmap sync` after merging to pull the fresh graph into your docs.
+`/forge-contextmap sync` after `/forge-merge` to pull the fresh graph into your docs — the merge
+commit fires the hook, so the graph is already current by then.
 
 **Diagnosis feeds execution directly.** `/forge-diagnose` writes `doc/diagnosis-<slug>.md`; pass that
 *path* to `/forge-orchestrate` rather than re-typing the problem — see
@@ -237,7 +243,7 @@ Reach for `/forge-audit` on-demand when cruft has piled up.
 
 ---
 
-## The Four Skills
+## The Five Skills
 
 ### /forge-contextmap — Scaffold the Docs, Build the Map
 
@@ -375,10 +381,44 @@ Flow:
 10. **Synthesize** — clean summary, updates `progress.txt` / `changelog.txt`, ticks the task, and writes `doc/release-readiness.md` (the CD steps it can't run locally: deploy, canary, monitoring, rollback, DAST)
 
 **This command commits** — a feature branch with per-subtask commits. It never tags and never merges
-to `main`; **you own the release and the merge.** Pass **`--no-commit`** to run the full pipeline and
+to `main`; **you own the release and the merge**, and `/forge-merge` is the command that carries it
+out once you're happy. Pass **`--no-commit`** to run the full pipeline and
 all gates with zero git writes — changes are left in the working tree for you to review and commit
 yourself. `/forge-orchestrate` never rebuilds the graph (that's `/forge-contextmap sync` or the post-commit
 hook), so commit or sync first if you have uncommitted structural changes.
+
+---
+
+### /forge-merge — Land It and Clean Up
+
+`/forge-orchestrate` stops at a branch. `/forge-merge` is the other half: it lands that branch, proves
+it landed, and deletes it so `git branch` stays short enough to read.
+
+```
+/forge-merge                       # the branch you're on — the normal case
+/forge-merge feature/checkout-fix  # or name one
+```
+
+Flow:
+1. **Detect the base branch** — `main` on some repos, `master` on others. Reads `origin/HEAD`, then
+   probes for local `main` and `master`, and asks rather than guessing when both exist
+2. **Pre-flight** — dirty tree gets a question, never a silent stash; a leftover `/forge-orchestrate`
+   worktree stops the run, because git won't delete a branch that's checked out somewhere
+3. **Merge** — `git merge --no-ff`, one merge commit, so the branch becomes a real ancestor of the
+   base rather than a squashed copy of it
+4. **On conflict** — `git merge --abort`, confirms the base is back at the SHA it started from, and
+   hands you the resolve-on-the-branch recipe. It never resolves a conflict for you
+5. **Verify, four ways** — the branch is an ancestor of the base, no commits left on it, none of the
+   branch's own changes missing from the base, and `git branch --merged` lists it. **Any failure and
+   nothing gets deleted**
+6. **Delete** — `git branch -d`, never `-D`, so git's own unmerged check stays as a backstop, plus
+   any `feature/x-st1`-style sub-branches a parallel `/forge-orchestrate` run left behind
+7. **Report** — every check with its real result, plus the push command and the exact undo SHA
+
+**Local only.** No `push`, no `fetch`, no remote writes — it works offline, and the merge doesn't
+leave your machine until you run the `git push` the report prints. Unlike `/forge-orchestrate` and
+`/forge-audit` it needs no graph; it reasons about git refs. The `--no-ff` merge commit does fire the
+post-commit hook, so `graph.json` is current on the merged code by the time it finishes.
 
 ---
 
@@ -465,7 +505,8 @@ the handoff has to be written, so `Write` is present — the guarantee that noth
 | `--graph-only` | `/forge-audit` | Skip source confirmation — faster, less precise, every finding tagged `[unconfirmed]` |
 
 `/forge-contextmap sync` is a subcommand, not a flag. `/forge-audit` also takes a bare path prefix
-(`/forge-audit src/checkout`) to scope the sweep.
+(`/forge-audit src/checkout`) to scope the sweep. `/forge-merge` has no flags — it takes an optional
+bare branch name and defaults to the branch you're on.
 
 ### When it stops vs. runs hands-off
 
@@ -668,7 +709,7 @@ string pins users until you bump it. `claude plugin validate .` warns about the 
 that warning is expected.
 
 Verify a change to either manifest with `claude plugin validate .` (schema) followed by
-`claude plugin details contextforge` (component inventory — must list all four skills; `validate`
+`claude plugin details contextforge` (component inventory — must list all five skills; `validate`
 alone passes even when the skills path resolves to nothing).
 
 ### Shared blocks
@@ -681,6 +722,7 @@ inside Python). Edit one copy, update the rest:
 | Block | Copies |
 |---|---|
 | `graph-hard-stop` | `skills/forge-orchestrate/SKILL.md` 0a · `skills/forge-audit/SKILL.md` 0b |
+| `base-branch` | `skills/forge-merge/SKILL.md` 0b · `skills/forge-orchestrate/SKILL.md` Phase 2 step 3 — the probe order must match, or the two skills can disagree about which branch is the base |
 | `python-cmd` | `skills/forge-orchestrate/SKILL.md` 0b · `skills/forge-audit/SKILL.md` 0c · `skills/forge-contextmap/references/sync.md` S1 |
 | `graphify-cli` | `skills/forge-contextmap/references/sync.md` S1.5 — **one copy, not duplicated.** Both consumers live in `forge-contextmap`, so `references/existing-project.md` E2.5 just points at it. Listed here because a second skill needing the CLI must copy it rather than reach across directories. |
 | `graph-loader` | `skills/forge-orchestrate/references/graph-slice.md` · `skills/forge-audit/SKILL.md` Phase 1 · `skills/forge-contextmap/references/sync.md` S3.6 |

@@ -228,21 +228,108 @@ edit the current tree in place and the user commits later.
    If the tree is dirty, ASK before proceeding — stash (`git stash push -u`) or abort. Do not
    silently discard or commit the user's pending work.
 
-2. **Create + checkout the branch:**
-   ```bash
-   git checkout -b [BRANCH]
-   ```
-   If `[BRANCH]` already exists, check it out and note it.
+2. **Resolve the base branch as `[BASE]`** — before the branch is created, because it is the branch's
+   start point:
 
-3. **Merge-conflict pre-check** vs the base branch (checklist: "automated merge conflict detection"):
+   <!-- forge:shared-block base-branch -->
+   Resolve the repository's base branch as `[BASE]`. It is `main` on some repos and `master` on
+   others — detect it, never assume. Run these as **separate Bash calls** (`||` is not available in
+   PowerShell 5.1) and take the first that answers:
+
+   ```bash
+   git symbolic-ref --quiet refs/remotes/origin/HEAD
+   ```
+
+   Prints `refs/remotes/origin/<name>` — strip the prefix to get the name. A silent non-zero exit
+   means there is no remote HEAD to read; move on.
+
+   ```bash
+   git rev-parse --verify --quiet refs/heads/main
+   ```
+
+   ```bash
+   git rev-parse --verify --quiet refs/heads/master
+   ```
+
+   `--quiet` is what makes a missing ref silent without `2>/dev/null`, which the portability
+   contract bans — read the exit code, not the output.
+
+   A probe only counts as answering if the name it yields exists as a **local** branch — the first
+   probe reads a remote ref, which can name a branch that was never checked out here or was deleted
+   locally. Confirm before accepting the name, and if the confirmation fails, keep going down the
+   list rather than stopping:
+
+   ```bash
+   git rev-parse --verify --quiet refs/heads/[BASE]
+   ```
+
+   If the first probe found nothing and **both** `main` and `master` exist locally, ask which one
+   with AskUserQuestion. Guessing here merges the work into the wrong branch.
+   <!-- /forge:shared-block base-branch -->
+
+   If nothing resolves, print `ℹ️ Base branch not resolved — branching from HEAD and skipping the
+   merge-conflict pre-check.`, then take the HEAD fallback in step 3 and skip step 4 entirely. Never
+   block a feature on this.
+
+3. **Create + checkout the branch, explicitly from `[BASE]`.** Probe first — `-b` fails hard when the
+   branch already exists, and re-running the same feature is normal:
+
+   ```bash
+   git rev-parse --verify --quiet refs/heads/[BRANCH]
+   ```
+
+   **Exit 0 — the branch already exists.** Check it out and note it. This is a rerun and its existing
+   commits are the point, so the start point is not reconsidered:
+
+   ```bash
+   git checkout [BRANCH]
+   ```
+
+   **Non-zero — new branch.** First check whether HEAD is carrying committed work that branching
+   from `[BASE]` would leave behind:
+
+   ```bash
+   git log --oneline [BASE]..HEAD
+   ```
+
+   Empty is the normal case — you are on `[BASE]`, or level with it. Create the branch without
+   asking:
+
+   ```bash
+   git checkout -b [BRANCH] [BASE]
+   ```
+
+   Not empty means HEAD has commits `[BASE]` doesn't, and there is no safe default: you are either
+   sitting on a stale branch by accident, or deliberately stacking this feature on another one. Ask
+   which, then use `git checkout -b [BRANCH] [BASE]` or bare `git checkout -b [BRANCH]` to match the
+   answer.
+
+   The start point is explicit on purpose. Bare `git checkout -b [BRANCH]` branches from HEAD, so
+   running `/forge-orchestrate` from an unrelated branch quietly drags that branch's commits into the
+   feature branch — and from there into `main` when `/forge-merge` lands it. They are real commits,
+   so nothing looks broken until they show up somewhere nobody reviewed them for.
+
+4. **Merge-conflict pre-check** vs `[BASE]` (checklist: "automated merge conflict detection").
+   Best-effort throughout — a repo with no remote fails the fetch, which is fine:
+
    ```bash
    git fetch
-```
-```bash
-git merge-base --is-ancestor origin/main HEAD
    ```
-   If the branch base is behind `main` / a conflict looks likely, print a one-line warning. Do not
-   block.
+
+   ```bash
+   git merge-base --is-ancestor origin/[BASE] HEAD
+   ```
+
+   If the fetch failed or `origin/[BASE]` does not exist, fall back to the local ref:
+
+   ```bash
+   git merge-base --is-ancestor [BASE] HEAD
+   ```
+
+   A non-zero exit means this branch is missing commits `[BASE]` already has. On a branch freshly
+   created in step 3 that can only come from the `origin/[BASE]` form — you have fetched work that
+   is not in your local `[BASE]` yet. On a rerun it means `[BASE]` moved while the branch was in
+   flight. Either way a conflict is likelier, so print a one-line warning. Do not block.
 
 ---
 
@@ -514,7 +601,7 @@ When all subtasks are complete:
 
    CD readiness: see doc/release-readiness.md (deploy/monitoring/rollback need your platform).
 
-   On branch [BRANCH] — merge it when you're happy.
+   On branch [BRANCH] — run /forge-merge when you're happy to land it and clean up.
    ```
    If `[FROM_DIAGNOSIS]` is true, add one line naming the source: `Fixes: doc/diagnosis-<slug>.md`.
 7. Clean up:
