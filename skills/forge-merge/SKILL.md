@@ -11,9 +11,8 @@ allowed-tools: Read, Bash, AskUserQuestion
 *"run /forge-merge when you're happy to land it and clean up."* This is that command.
 
 Three jobs, in order: **merge** the branch into the repo's base branch, **prove** it fully landed
-with checks that each map to a real command's exit status, then **delete** the branch and the
-worktree sub-branches `/forge-orchestrate` may have left behind — so `git branch` stays short enough
-to read.
+with checks that each map to a real command's exit status, then **delete** the branch — so
+`git branch` stays short enough to read.
 
 Reads `$ARGUMENTS` as the branch to land. With no arguments it lands the branch you are on, which is
 the normal case: you just finished reviewing it.
@@ -125,19 +124,23 @@ worse than the wait. Do not silently discard, stash, or commit the user's pendin
 
 ### 0d. Leftover-worktree check
 
+Clear stale metadata first, so a worktree that was already deleted from disk doesn't stop the run:
+
+```bash
+git worktree prune
+```
+
 ```bash
 git worktree list
 ```
 
-`/forge-orchestrate`'s parallel mode creates `../<repo>-st<i>` worktrees on `[BRANCH]/st<i>`
-sub-branches and removes them in its Phase 6. If that cleanup didn't finish, those checkouts are
-still here — and git will not delete a branch that is checked out in a worktree, so PHASE 3 would
-fail after the merge already happened.
+Git will not delete a branch that is checked out in a worktree, and this check is cheap here versus
+discovering it in PHASE 3, *after* the merge already happened. `/forge-orchestrate`'s parallel mode
+is the usual source of extra worktrees, but a hand-made one counts the same.
 
-If any worktree other than the main one has `[BRANCH]` or a `[BRANCH]/st*` sub-branch checked out,
-report the exact paths and stop. Point the user at `/forge-orchestrate`'s
-`references/worktree-mode.md` cleanup section. Force-removing someone's worktree is not this
-command's call.
+If any worktree other than the main one has `[BRANCH]` checked out, report the exact paths and stop.
+Removing someone's worktree is not this command's call — `git worktree remove <path>` is one command
+and the user knows whether they still need it.
 
 ### 0e. Show what is about to land
 
@@ -225,14 +228,14 @@ entirely and go to PHASE 2 — the verification and cleanup are still exactly wh
 
 ## PHASE 2: Verify It Fully Merged
 
-The double-check, and the reason this command exists rather than a bare `git merge`. Four
-independent checks — run all four, record each one's real result:
+The double-check, and the reason this command exists rather than a bare `git merge`. Run all four
+and record each one's real result:
 
 | Check | Command | Passes when |
 |---|---|---|
 | Ancestry | `git merge-base --is-ancestor [BRANCH] [BASE]` | exit 0 |
 | Nothing left behind | `git log --oneline [BASE]..[BRANCH]` | no output |
-| Content identical | `git diff --stat [BASE] [BRANCH]` | no output |
+| Branch content is in the base | `git diff --stat [BASE]...[BRANCH]` | no output |
 | Git agrees | `git branch --merged [BASE]` | lists `[BRANCH]` |
 
 ```bash
@@ -244,19 +247,29 @@ git log --oneline [BASE]..[BRANCH]
 ```
 
 ```bash
-git diff --stat [BASE] [BRANCH]
+git diff --stat [BASE]...[BRANCH]
 ```
 
 ```bash
 git branch --merged [BASE]
 ```
 
-Argument order on `--is-ancestor` matters: it asks *is the first ref an ancestor of the second*, so
-`[BRANCH]` comes before `[BASE]`.
+Two argument details that are easy to get wrong, and both fail *silently* in the direction that
+matters:
 
-They overlap on purpose. Ancestry answers "is this history in the base"; the diff answers "is this
-*content* in the base". A branch can be an ancestor while a later commit on the base reverted part
-of it — the diff catches that and ancestry doesn't. Two cheap questions beat one confident one.
+- `--is-ancestor` asks *is the first ref an ancestor of the second*, so `[BRANCH]` comes before
+  `[BASE]`. Reversed, it answers a different question and passes for the wrong reason.
+- **Three dots on the diff, never two.** `[BASE]...[BRANCH]` compares the merge base against the
+  branch: "are the branch's own changes all in the base?" Two dots compares the two tips, which
+  reports every commit the base gained *after* the branch was cut as a difference — so a perfectly
+  merged branch fails the check the moment anyone else lands anything. That is the common case, not
+  an edge case.
+
+These are corroborating, not logically independent — when the merge is a normal `--no-ff` all four
+answer the same underlying question. That is the point: they are nearly free, they each print a
+*different view* of a failure (an exit code, the missing commits by name, the missing content, git's
+own verdict), and the fourth is exactly what `git branch -d` will consult in PHASE 3. If they ever
+disagree, something about the refs is not what you think it is — stop and look.
 
 **If any check fails, do not delete anything.** Report which check failed and what it printed, leave
 `[BRANCH]` alive, and stop. A branch left behind costs nothing; a branch deleted on a bad assumption
@@ -281,28 +294,6 @@ costs the work.
    `-d` refuses if git thinks the branch isn't merged. That refusal is a real signal that PHASE 2
    missed something — quote git's exact message, leave the branch, and stop. Never reach for `-D`.
 
-3. **Sweep the orchestrate sub-branches.** List them first:
-
-   ```bash
-   git branch --list "[BRANCH]/*"
-   ```
-
-   Each `[BRANCH]/st<i>` was merged into `[BRANCH]`, which is now in `[BASE]`, so `-d` accepts them
-   without force. Delete them one at a time:
-
-   ```bash
-   git branch -d [BRANCH]/st1
-   ```
-
-   Then clear any stale worktree metadata left over from the same run:
-
-   ```bash
-   git worktree prune
-   ```
-
-   If a delete is refused, report it and move on to the next — one stubborn sub-branch is not a
-   reason to abandon the rest of the cleanup.
-
 ---
 
 ## PHASE 4: Report
@@ -314,21 +305,20 @@ Merged:   [N] commits, [M] files changed
   [sha] — [subject]
   ...
 
-Verified: [BRANCH] is an ancestor of [BASE]      pass
-          no commits left on [BRANCH]            pass
-          no diff between [BRANCH] and [BASE]    pass
-          git branch --merged lists it           pass
+Verified: [BRANCH] is an ancestor of [BASE]        pass
+          no commits left on [BRANCH]              pass
+          branch content all present in [BASE]     pass
+          git branch --merged lists it             pass
 
 Deleted:  [BRANCH]
-          [BRANCH]/st1, [BRANCH]/st2   (orchestrate worktree sub-branches)
 
 Local only — nothing was pushed.
   Push when ready:  git push origin [BASE]
   Undo the merge:   git reset --hard [BASE_SHA]   (while on [BASE])
 ```
 
-Drop the `Deleted:` sub-branch line when there were none. If PHASE 0e found the branch already
-merged, say so in place of the `Merged:` block rather than printing zero commits as if work landed.
+If PHASE 0e found the branch already merged, say so in place of the `Merged:` block rather than
+printing zero commits as if work landed.
 
 ---
 
