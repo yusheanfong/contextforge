@@ -411,7 +411,8 @@ Flow:
 5. **Verify, four ways** — the branch is an ancestor of the base, no commits left on it, none of the
    branch's own changes missing from the base, and `git branch --merged` lists it. **Any failure and
    nothing gets deleted**
-6. **Delete** — `git branch -d`, never `-D`, so git's own unmerged check stays as a backstop
+6. **Delete** — `git branch -d`, never `-D`, so git's own unmerged check stays as a backstop, plus
+   any `feature/x-st1`-style sub-branches a parallel `/forge-orchestrate` run left behind
 7. **Report** — every check with its real result, plus the push command and the exact undo SHA
 
 **Local only.** No `push`, no `fetch`, no remote writes — it works offline, and the merge doesn't

@@ -101,13 +101,16 @@ If the first probe found nothing and **both** `main` and `master` exist locally,
 with AskUserQuestion. Guessing here merges the work into the wrong branch.
 <!-- /forge:shared-block base-branch -->
 
-If nothing resolves, print this and STOP — merging into a branch you cannot name is not a thing to
-improvise:
+If nothing resolves — a repo on `trunk`, `develop`, or anything else, with no `origin/HEAD` to read
+it from — do not improvise a base. List the candidates and ask with AskUserQuestion, excluding
+`[BRANCH]` itself:
 
+```bash
+git branch
 ```
-❌ Couldn't resolve the base branch — no origin/HEAD, and neither main nor master exists locally.
-Tell me which branch to merge into: /forge-merge [branch] (I'll ask you for the base).
-```
+
+Stopping outright would be worse than asking: the branch is finished and the user knows the answer
+in a second. Only stop if the repo has no other branch to merge into.
 
 If `[BRANCH]` and `[BASE]` are the same, stop: you are already on the base branch and there is
 nothing to land.
@@ -294,6 +297,30 @@ costs the work.
    `-d` refuses if git thinks the branch isn't merged. That refusal is a real signal that PHASE 2
    missed something — quote git's exact message, leave the branch, and stop. Never reach for `-D`.
 
+3. **Sweep the orchestrate sub-branches.** A parallel `/forge-orchestrate` run leaves
+   `[BRANCH]-st<i>` branches behind when its Phase 6 cleanup didn't finish. List them first — the
+   glob cannot match `[BRANCH]` itself, so there is no risk of catching the wrong ref:
+
+   ```bash
+   git branch --list "[BRANCH]-st*"
+   ```
+
+   Read the names off that output without their leading marker: `git branch` prefixes the current
+   branch with `*` and a branch checked out in **another worktree** with `+`. The `+` case is
+   exactly what shows up here, and feeding `+name` to `git branch -d` gets you
+   `error: branch '+name' not found` — a confusing miss rather than the real refusal.
+
+   Each was merged into `[BRANCH]`, which is now in `[BASE]`, so plain `-d` accepts them. Delete one
+   at a time:
+
+   ```bash
+   git branch -d [BRANCH]-st1
+   ```
+
+   A refusal here — most likely `cannot delete branch … used by worktree at …` — gets reported, and
+   you carry on with the rest. One stubborn sub-branch is not a reason to abandon the cleanup, and
+   it is never a reason to reach for `-D`.
+
 ---
 
 ## PHASE 4: Report
@@ -311,14 +338,15 @@ Verified: [BRANCH] is an ancestor of [BASE]        pass
           git branch --merged lists it             pass
 
 Deleted:  [BRANCH]
+          [BRANCH]-st1, [BRANCH]-st2   (orchestrate worktree sub-branches)
 
 Local only — nothing was pushed.
   Push when ready:  git push origin [BASE]
   Undo the merge:   git reset --hard [BASE_SHA]   (while on [BASE])
 ```
 
-If PHASE 0e found the branch already merged, say so in place of the `Merged:` block rather than
-printing zero commits as if work landed.
+Drop the sub-branch line when there were none. If PHASE 0e found the branch already merged, say so
+in place of the `Merged:` block rather than printing zero commits as if work landed.
 
 ---
 
