@@ -507,42 +507,88 @@ result as `pass` / `fail` / `skipped (reason)`:
 6. **SAST** — `semgrep --error` if installed; else `skipped (semgrep not installed)`. (checklist:
    "SAST")
 
-### 5b. Review checks
+### 5b. Review checks — ONE read-only reviewer subagent
 
-1. **Spec compliance** — does the worker output do exactly what the subtask asked (nothing
-   missing, nothing extra)? If the subtask carries a `Builds: Fn` reference, check the diff
-   against that feature's line in `doc/prd.md`. If `[FROM_DIAGNOSIS]` is true, check the diff
-   against the handoff's §7 *Proposed fix* instead — including any design choice §7 explicitly
-   left to this session.
-2. **Quality** — only after spec passes — is it well-built (tests real, no obvious smell)?
-3. **Over-engineering** *(always runs)* — an over-engineering review pass on THIS worker's diff:
-   flag speculative abstractions, unrequested flexibility, reinvented stdlib/deps, and dead
-   scaffolding, and hand back a **delete-list**. Review criteria = the minimal-code ladder (walk it
-   top-down, stop at the first rung that applies):
-   <!-- forge:shared-block minimal-ladder -->
-   1. Does this need to exist? → shouldn't (YAGNI)
-   2. Already in this codebase? → should have reused it
-   3. Stdlib does it? → should have used it
-   4. Native platform feature? → should have used it
-   5. Installed dependency? → should have used it
-   6. One line? → should be one line
-   7. Only then: the minimum that works
-   <!-- /forge:shared-block minimal-ladder -->
-   **Run it from the MAIN session by default** (it can read this whole file, including the ladder).
-   If you instead dispatch a read-only reviewer subagent, its payload MUST restate the ladder above
-   as the review criteria — a subagent sees only its dispatch payload, not this file.
-   **Scope guard — never delete-list these:** the tests Phase 4 mandates, and any file needed to
-   satisfy the subtask's success criterion. Minimality never overrides the "workers must write
-   tests" rule.
-4. **Design compliance** *(UI subtasks only — skip when `doc/design-brief.md` doesn't exist)* —
-   scan the diff for style values: every color, font size, spacing, and radius must come from
-   `doc/design-brief.md` tokens, and components must be the brief's reusable ones. An ad-hoc hex
-   value, magic font size, or one-off component = review FAILURE routed through the same bounded
-   loop (5c) with the offending values listed. If the value is genuinely needed, the fix is to add
-   it to `design-brief.md` first (surface that to the user), not to hardcode it.
+All four checks run in a **single reviewer dispatch**, and the reviewer runs `git diff` **itself**.
+The diff never enters this session's context or its output. That matters because main-session
+tokens are recurring — paid again on every later turn — while a subagent's are discarded when it
+returns. Splitting the checks defeats it: any one of them left here drags the whole diff back in.
 
-Either dispatch a reviewer subagent (read-only) with the criterion + the worker's diff, or
-review directly.
+Assemble the reviewer payload from:
+
+- the subtask **goal** + **success criterion**
+- **the diff command**, with the right cwd for the dispatch mode (see below) and scoped to the files
+  the worker reported changing
+- the minimal-code ladder — paste the block below into the payload. A subagent sees only its
+  dispatch payload, never this file:
+  <!-- forge:shared-block minimal-ladder -->
+  1. Does this need to exist? → shouldn't (YAGNI)
+  2. Already in this codebase? → should have reused it
+  3. Stdlib does it? → should have used it
+  4. Native platform feature? → should have used it
+  5. Installed dependency? → should have used it
+  6. One line? → should be one line
+  7. Only then: the minimum that works
+  <!-- /forge:shared-block minimal-ladder -->
+- **Scope guard, verbatim:** never delete-list the tests Phase 4 mandates, or any file needed to
+  satisfy the subtask's success criterion. Minimality never overrides the "workers must write
+  tests" rule.
+- the four checks, each one line, the last two conditional:
+  1. **Spec compliance** — does the diff do exactly what the subtask asked, nothing missing and
+     nothing extra? If the subtask carries a `Builds: Fn` reference, add: "read `doc/prd.md` and
+     check the diff against feature Fn." If `[FROM_DIAGNOSIS]` is true, add instead: "read
+     `doc/diagnosis-<slug>.md` and check against its §7 *Proposed fix*, including any design choice
+     §7 explicitly left to this session."
+  2. **Quality** — only if spec passes — is it well-built (tests real, no obvious smell)?
+  3. **Over-engineering** *(always)* — walk the ladder top-down over the diff, stop at the first
+     rung that applies, and return a **delete-list**: speculative abstractions, unrequested
+     flexibility, reinvented stdlib/deps, dead scaffolding.
+  4. **Design compliance** *(only when the subtask is UI and `doc/design-brief.md` exists)* — "read
+     `doc/design-brief.md`. Every color, font size, spacing and radius in the diff must be one of
+     its tokens, and components must be its reusable ones."
+
+**Return contract** — this is all that enters this session, so keep it tight:
+
+```
+VERDICT: PASS | FAIL
+FAILURES:    one line each, or "none"
+DELETE-LIST: path:line — reason, or "clean"
+```
+
+`FAILURES` lines must name the **concrete offending values**, not just which check failed. 5b.4's
+escalation depends on it: you can only tell the user "add `#3B82F6` to `design-brief.md` first,
+don't hardcode it" if the reviewer reported the hex. A bare "design check failed" kills that path —
+and if the value is genuinely needed, adding it to the brief is the fix, never hardcoding.
+
+#### Where the reviewer runs `git diff`
+
+**Worktree mode** — the subtask's edits live in its own checkout, and a subagent starts in THIS
+session's cwd, not there. A bare `git diff` would come back empty and the reviewer would return
+`VERDICT: PASS` on nothing. Give it the absolute worktree path and have it use the `-C` form, the
+same way 5d stages:
+
+```bash
+git -C <worktree abs path> diff -- [exact files this worker reported]
+```
+
+No baseline problem here: the checkout is isolated and 5b runs before that worktree commits, so its
+working-tree diff is exactly this subtask's work.
+
+**Single-tree, commit mode** — 5d commits each subtask as it passes, so HEAD advances and a plain
+`git diff -- [files]` is already scoped to the current subtask.
+
+**Single-tree, `[NO_COMMIT]`** — nothing commits, so HEAD never moves and the working tree
+accumulates every subtask's changes. File scoping alone does not save this; 5d.3's collision rule
+exists precisely because two subtasks touching one file is expected. For any file in scope that an
+**earlier** subtask in this run also reported, append to the payload:
+
+```
+Out of scope — <path> also carries changes from an earlier subtask in this run
+("<that subtask's goal>"). Review only the hunks belonging to THIS subtask, and never
+delete-list the earlier work.
+```
+
+Omit that line when there is no overlap.
 
 ### 5c. Conditional routing loop (bounded)
 

@@ -34,8 +34,16 @@ create.
 
 Then dispatch worker `i` with its payload (Phase 3) **plus** the absolute worktree path, instructing
 it: "Make ALL edits and run ALL commands under `<worktree abs path>` — that is your isolated
-checkout. Do not touch any other directory." Gates (Phase 5) run with that worktree as cwd. Workers
-in the same batch run fully in parallel with zero shared mutable state.
+checkout. Do not touch any other directory." Workers in the same batch run fully in parallel with
+zero shared mutable state.
+
+Both halves of Phase 5 need that same path:
+
+- **The gate runner (5a)** runs with that worktree as cwd.
+- **The 5b reviewer subagent** is spawned from the MAIN session, so it starts in the main session's
+  cwd — *not* the worktree. Its payload MUST carry the absolute worktree path and use
+  `git -C <worktree abs path> diff -- [files]`. A bare `git diff` returns nothing there and the
+  reviewer reports `VERDICT: PASS` on an empty diff.
 
 After a worker passes its gates, its subtask is committed **on its sub-branch inside its worktree**
 (5d below), then merged back (5e).
