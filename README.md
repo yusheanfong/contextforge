@@ -35,7 +35,11 @@ Then, inside your project:
 /forge-contextmap sync     # pulls the fresh graph back into your docs
 ```
 
-Repeat the last three per task. Prefer copying files over a plugin install? See
+Repeat the last three per task.
+
+A plugin install namespaces these as `/contextforge:forge-…`, so the bare names above won't
+autocomplete — see [Names are namespaced](#install-as-a-plugin-recommended). Asking by intent works
+either way. Prefer copying files over a plugin install? See
 [Manual install](#manual-install-copy-the-skills). Want to know what each step actually does? See
 [The Loop](#the-loop).
 
