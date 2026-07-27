@@ -326,8 +326,10 @@ edit the current tree in place and the user commits later.
    git merge-base --is-ancestor [BASE] HEAD
    ```
 
-   A non-zero exit means this branch's base is behind `[BASE]` and a conflict is likelier — print a
-   one-line warning. Do not block.
+   A non-zero exit means this branch is missing commits `[BASE]` already has. On a branch freshly
+   created in step 3 that can only come from the `origin/[BASE]` form — you have fetched work that
+   is not in your local `[BASE]` yet. On a rerun it means `[BASE]` moved while the branch was in
+   flight. Either way a conflict is likelier, so print a one-line warning. Do not block.
 
 ---
 

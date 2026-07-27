@@ -2,7 +2,7 @@
 name: forge-merge
 description: Land a verified feature branch and clean up (/forge-merge). Use after /forge-orchestrate when you have reviewed the branch and want it merged back into main or master, confirmed fully merged, and the branch deleted. Triggers include "/forge-merge", "merge this branch back", "land the feature branch", "merge and delete the branch", "finish this feature", "clean up the merged branch".
 argument-hint: "[branch]"
-allowed-tools: Read, Bash, AskUserQuestion
+allowed-tools: Bash, AskUserQuestion
 ---
 
 # /forge-merge — Land a Verified Branch, Prove It Landed, Clean Up
@@ -11,8 +11,9 @@ allowed-tools: Read, Bash, AskUserQuestion
 *"run /forge-merge when you're happy to land it and clean up."* This is that command.
 
 Three jobs, in order: **merge** the branch into the repo's base branch, **prove** it fully landed
-with checks that each map to a real command's exit status, then **delete** the branch — so
-`git branch` stays short enough to read.
+with checks that each map to a real command's exit status, then **delete** the branch and any
+worktree sub-branches a parallel `/forge-orchestrate` run left behind — so `git branch` stays short
+enough to read.
 
 Reads `$ARGUMENTS` as the branch to land. With no arguments it lands the branch you are on, which is
 the normal case: you just finished reviewing it.
@@ -288,6 +289,14 @@ costs the work.
    git rev-parse --abbrev-ref HEAD
    ```
 
+   PHASE 1 leaves you here, but the already-merged path from 0e skips PHASE 1 and therefore skips
+   its checkout — so if HEAD is still `[BRANCH]`, move before deleting rather than watching `-d`
+   fail with `cannot delete branch '…' used by worktree at '…'`:
+
+   ```bash
+   git checkout [BASE]
+   ```
+
 2. **Delete it:**
 
    ```bash
@@ -317,9 +326,23 @@ costs the work.
    git branch -d [BRANCH]-st1
    ```
 
-   A refusal here — most likely `cannot delete branch … used by worktree at …` — gets reported, and
-   you carry on with the rest. One stubborn sub-branch is not a reason to abandon the cleanup, and
-   it is never a reason to reach for `-D`.
+   A refusal comes in two flavours and they mean opposite things — read which one git printed:
+
+   - **`cannot delete branch '…' used by worktree at '…'`** — housekeeping. Its worktree outlived
+     the run. Report the path, carry on with the rest of the sweep; one stubborn sub-branch is not a
+     reason to abandon the cleanup.
+   - **`the branch '…' is not fully merged`** — a **finding**, and the more important half of why
+     this sweep is here. It means `/forge-orchestrate`'s 5e merge-back never completed for that
+     subtask, so there is committed work sitting on the sub-branch that never reached `[BRANCH]` and
+     therefore never reached `[BASE]`. Show the user exactly what is stranded and leave the branch
+     alone — it is the only copy:
+
+     ```bash
+     git log --oneline [BASE]..[BRANCH]-st1
+     ```
+
+   Git's own hint on that second message suggests `git branch -D`. Do not take it. `-D` on a branch
+   holding the only copy of a subtask's work is precisely the deletion this command refuses to make.
 
 ---
 
