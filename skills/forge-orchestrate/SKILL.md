@@ -26,7 +26,7 @@ writes (you review the working tree and commit yourself).
 Synthesis = final report + release-readiness.
 
 **Global state object** — track these across phases and surface them in the final report:
-`branch`, `subtasks[]` (goal, criterion, deps, independent, gate_set, status, commit_sha),
+`branch`, `subtasks[]` (goal, criterion, deps, independent, gate_set, status, agent_id, commit_sha),
 `gate_results`, `files_changed`, `commits[]`, `all_gates_pass`.
 
 **Reference files** — read each only when its branch applies, not up front:
@@ -415,6 +415,10 @@ capable model for multi-file integration or design judgment.
 Each worker receives ONLY its payload from Phase 3 — not this session's history. Workers edit
 code + write tests + run them, and do **NOT** commit. Committing happens in Phase 5 after gates pass.
 
+**Record every dispatched worker's agent ID/name in its subtask state (`agent_id`).** 5c resumes
+that live agent instead of respawning it, and without the ID there is nothing to resume. This
+applies to both dispatch modes below.
+
 ### Dispatch mode — worktrees vs. single tree
 
 Decide per batch of sibling subtasks:
@@ -519,9 +523,15 @@ review directly.
 ### 5c. Conditional routing loop (bounded)
 
 If any **gate** (5a) or **review check** (5b) FAILS, re-dispatch the SAME worker with the specific
-failures as an error log, and re-run 5a–5b. An over-engineering delete-list (5b.3) counts as a
-review failure — feed it back as the error log ("delete these, keep tests + success-criterion
-files") through this same loop; do not open a separate one.
+failures as an error log, and re-run 5a–5b. A non-empty delete-list counts as a review failure —
+feed it back as the error log ("delete these, keep tests + success-criterion files") through this
+same loop; do not open a separate one.
+
+**Re-dispatch means *resume*, not respawn.** Send the failures to the agent that is already alive —
+in Claude Code, `SendMessage` with the `agent_id` recorded in Phase 4. Its context is intact,
+including every file it read and every edit it made, so you send only the error log, not the
+payload. Spawn a fresh `Agent` **only** if that agent is gone; that path re-sends the whole payload
+and the worker has to re-read everything it already read.
 
 **Bounded loop: at most 3 iterations per subtask.** If still failing after 3, stop the loop and
 report it to the user — do not loop further.
