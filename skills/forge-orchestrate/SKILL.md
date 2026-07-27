@@ -234,15 +234,66 @@ edit the current tree in place and the user commits later.
    ```
    If `[BRANCH]` already exists, check it out and note it.
 
-3. **Merge-conflict pre-check** vs the base branch (checklist: "automated merge conflict detection"):
+3. **Resolve the base branch as `[BASE]`:**
+
+   <!-- forge:shared-block base-branch -->
+   Resolve the repository's base branch as `[BASE]`. It is `main` on some repos and `master` on
+   others — detect it, never assume. Run these as **separate Bash calls** (`||` is not available in
+   PowerShell 5.1) and take the first that answers:
+
+   ```bash
+   git symbolic-ref --quiet refs/remotes/origin/HEAD
+   ```
+
+   Prints `refs/remotes/origin/<name>` — strip the prefix to get the name. A silent non-zero exit
+   means there is no remote HEAD to read; move on.
+
+   ```bash
+   git rev-parse --verify --quiet refs/heads/main
+   ```
+
+   ```bash
+   git rev-parse --verify --quiet refs/heads/master
+   ```
+
+   `--quiet` is what makes a missing ref silent without `2>/dev/null`, which the portability
+   contract bans — read the exit code, not the output.
+
+   A probe only counts as answering if the name it yields exists as a **local** branch — the first
+   probe reads a remote ref, which can name a branch that was never checked out here or was deleted
+   locally. Confirm before accepting the name, and if the confirmation fails, keep going down the
+   list rather than stopping:
+
+   ```bash
+   git rev-parse --verify --quiet refs/heads/[BASE]
+   ```
+
+   If the first probe found nothing and **both** `main` and `master` exist locally, ask which one
+   with AskUserQuestion. Guessing here merges the work into the wrong branch.
+   <!-- /forge:shared-block base-branch -->
+
+   If nothing resolves, print `ℹ️ Base branch not resolved — skipping the merge-conflict pre-check.`
+   and go to Phase 3. This check is a warning; never block a feature on it.
+
+4. **Merge-conflict pre-check** vs `[BASE]` (checklist: "automated merge conflict detection").
+   Best-effort throughout — a repo with no remote fails the fetch, which is fine:
+
    ```bash
    git fetch
-```
-```bash
-git merge-base --is-ancestor origin/main HEAD
    ```
-   If the branch base is behind `main` / a conflict looks likely, print a one-line warning. Do not
-   block.
+
+   ```bash
+   git merge-base --is-ancestor origin/[BASE] HEAD
+   ```
+
+   If the fetch failed or `origin/[BASE]` does not exist, fall back to the local ref:
+
+   ```bash
+   git merge-base --is-ancestor [BASE] HEAD
+   ```
+
+   A non-zero exit means this branch's base is behind `[BASE]` and a conflict is likelier — print a
+   one-line warning. Do not block.
 
 ---
 
@@ -514,7 +565,7 @@ When all subtasks are complete:
 
    CD readiness: see doc/release-readiness.md (deploy/monitoring/rollback need your platform).
 
-   On branch [BRANCH] — merge it when you're happy.
+   On branch [BRANCH] — run /forge-merge when you're happy to land it and clean up.
    ```
    If `[FROM_DIAGNOSIS]` is true, add one line naming the source: `Fixes: doc/diagnosis-<slug>.md`.
 7. Clean up:
