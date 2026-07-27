@@ -10,7 +10,52 @@ Five Claude Code skills that share one live knowledge graph: scaffold the workfl
 /forge-diagnose     → find root cause, change nothing, hand off
 ```
 
-`/forge-contextmap` is the entry point — `/forge-orchestrate` and `/forge-audit` hard-stop until it has built the graph. `/forge-diagnose` doesn't: it uses the graph when present and greps when not, so a bug is never blocked behind a graph build. `/forge-merge` doesn't either — it reasons about git refs, not code, so it runs in any git repo.
+`/forge-contextmap` is the entry point: it builds the graph. `/forge-orchestrate` and `/forge-audit` hard-stop until it has.
+
+The other two run without it. `/forge-diagnose` uses the graph when present and greps when not, so a bug is never blocked behind a graph build. `/forge-merge` reasons about git refs rather than code, so it runs in any git repo.
+
+---
+
+## Quickstart
+
+Install (plugin, both commands in your terminal):
+
+```bash
+claude plugin marketplace add https://github.com/yusheanfong/contextforge.git
+claude plugin install contextforge@contextforge
+```
+
+Then, inside your project:
+
+```
+/forge-contextmap          # once — scaffolds doc/ + CLAUDE.md, builds the graph
+/forge-orchestrate         # builds the next task off doc/task-list.md, on a branch
+                           # → review the diff
+/forge-merge               # lands that branch, verifies it, deletes it
+/forge-contextmap sync     # pulls the fresh graph back into your docs
+```
+
+Repeat the last three per task. Prefer copying files over a plugin install? See
+[Manual install](#manual-install-copy-the-skills). Want to know what each step actually does? See
+[The Loop](#the-loop).
+
+---
+
+## Contents
+
+- [What It Does](#what-it-does)
+- [Install](#install) — [plugin](#install-as-a-plugin-recommended) · [manual](#manual-install-copy-the-skills) · [requirements](#requirements)
+- [The Loop](#the-loop)
+- [The Five Skills](#the-five-skills)
+  - [/forge-contextmap — Scaffold the Docs, Build the Map](#forge-contextmap--scaffold-the-docs-build-the-map)
+  - [/forge-orchestrate — Execute With the Map](#forge-orchestrate--execute-with-the-map)
+  - [/forge-merge — Land It and Clean Up](#forge-merge--land-it-and-clean-up)
+  - [/forge-audit — Sweep for Over-Engineering](#forge-audit--sweep-for-over-engineering)
+  - [/forge-diagnose — Find the Root Cause, Hand It Off](#forge-diagnose--find-the-root-cause-hand-it-off)
+  - [Flags](#flags) · [When it stops vs. runs hands-off](#when-it-stops-vs-runs-hands-off)
+- [What Gets Created](#what-gets-created)
+- [How It Works](#how-it-works)
+- [For Maintainers](#for-maintainers)
 
 ---
 
@@ -18,20 +63,21 @@ Five Claude Code skills that share one live knowledge graph: scaffold the workfl
 
 Claude Code starts every session cold. It reads `CLAUDE.md` (auto-loaded, ~600 tokens) to know what it's building. Generic placeholders mean generic decisions.
 
-ContextForge replaces those placeholders with architecture extracted from your actual code, then keeps five workflows — scaffold, execute, land, audit, diagnose — reading from that same extracted map instead of from whatever happens to be in the session's context window.
+ContextForge replaces those placeholders with architecture extracted from your actual code. Five workflows — scaffold, execute, land, audit, diagnose — then read from that same extracted map, instead of from whatever happens to be in the session's context window.
 
 ---
 
 ## Install
 
-All five are packaged as **skills** — a thin `SKILL.md` plus `references/` files loaded only on the
-branch that needs them (progressive disclosure: a single-tree run never reads the worktree
-instructions, a project with no task list never reads the tick rules).
+All five are packaged as **skills**: a thin `SKILL.md` plus `references/` files loaded only on the
+branch that needs them. That is progressive disclosure — a single-tree run never reads the worktree
+instructions, and a project with no task list never reads the tick rules.
 
-There is **no `.claude/commands/` directory** — a skill is already a slash command. `user-invocable`
-defaults to `true`, so each one appears in the `/` menu (as `/contextforge:forge-<name>` via the
-plugin, or `/forge-<name>` if you copy the files). The `description` also lets Claude reach for it on
-intent: "sweep this repo for dead code" gets you `/forge-audit` without typing the slash.
+There is **no `.claude/commands/` directory**, because a skill is already a slash command.
+`user-invocable` defaults to `true`, so each one appears in the `/` menu — as
+`/contextforge:forge-<name>` via the plugin, or `/forge-<name>` if you copy the files. The
+`description` also lets Claude reach for a skill on intent: "sweep this repo for dead code" gets you
+`/forge-audit` without typing the slash.
 
 **Coming from a pre-skill install?** These skills do not upgrade your old
 `~/.claude/commands/forge-*.md` files — install from the block below, then delete the stale
@@ -112,6 +158,9 @@ rm -rf /tmp/contextforge
 
 Start with **`forge-contextmap`** regardless — the others depend on the graph it builds.
 
+<details>
+<summary><b>Updating, switching, upgrading, uninstalling</b> — the maintenance paths, expand when you need one</summary>
+
 ### Updating
 
 **Plugin install:** the plugin declares no pinned `version`, so every commit pushed here counts as a
@@ -173,6 +222,8 @@ rm -rf ~/.claude/skills/forge-*
 rm -f ~/.claude/commands/forge-*.md   # only if you ever used a pre-skill install
 ```
 
+</details>
+
 ### Requirements
 
 - Claude Code. Any version for the manual install — the skills themselves use no version-gated
@@ -224,8 +275,8 @@ the plan stays the single source of truth for what's next. Type a description on
 isn't on the plan.
 
 **Sync comes *after* `/forge-orchestrate`, not before.** `/forge-orchestrate` updates `progress.txt`,
-`changelog.txt`, and `task-list.md` — but it does **not** refresh the `graphify:auto` doc fences.
-The post-commit hook rebuilds `graph.json` on every commit yet never writes docs. So run
+`changelog.txt`, and `task-list.md`, but it does **not** refresh the `graphify:auto` doc fences. The
+post-commit hook rebuilds `graph.json` on every commit, yet never writes docs. So run
 `/forge-contextmap sync` after `/forge-merge` to pull the fresh graph into your docs — the merge
 commit fires the hook, so the graph is already current by then.
 
