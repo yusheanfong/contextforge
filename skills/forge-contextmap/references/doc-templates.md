@@ -97,7 +97,18 @@ For multi-step tasks, state a brief plan with a verify step per step:
 2. [Step] → verify: [check]
 ```
 
-Note: rules 1/6/7 reference `design-brief.md` / `backend-schema.md` — drop those references from the rules text too when the corresponding doc isn't created.
+Note: rules 1/6/7 reference `design-brief.md` / `backend-schema.md`. When the corresponding doc
+isn't created, drop the *reference*, not the whole line — and never by deleting every line that
+contains the filename. Rule 1's sub-bullets and rules 6/7 are separate cases:
+
+- Rule 1's `UI/screen/widget/component task →` sub-bullet goes only if there is no UI; the
+  data/API sub-bullets keep their `doc/backend-schema.md (if present)` clause either way, because
+  it is already conditional.
+- Rule 6 exists only for a UI project — drop the whole rule when there is no UI.
+- Rule 7 names three docs; drop only the missing one from the list and keep the rule.
+
+**Renumber the remaining rules so they run 1..n with no gaps.** A rules list that jumps from 5 to 8
+tells every agent reading it that something was lost.
 
 **File 2: `doc/prd.md`** — fully user-owned, no graph fence:
 

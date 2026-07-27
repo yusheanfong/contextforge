@@ -349,7 +349,8 @@ edges. `NO_MATCH` means the graph has no node for these terms — fall back to t
 
 **Pass paths, not text.** Workers have the Read tool, and the payload is routing — the same
 pointers-not-content rule the graph slice already follows. Do NOT read these docs and paste them in;
-a pasted doc set is 4–8k *output* tokens per dispatch, re-emitted on every retry.
+a pasted doc set is ~2k *output* tokens per dispatch on a small project and more on a large one,
+re-emitted on every retry.
 
 List `doc/*.md` **once per run** (one glob, cached) so you know what actually exists. Then, from the
 `FILES` the slice returned, name the matching domain docs plus the universal ones — paths only, and
