@@ -347,8 +347,14 @@ edges. `NO_MATCH` means the graph has no node for these terms — fall back to t
 
 ### 3b. Doc slice
 
-From the `FILES` the slice returned, pick the matching domain docs and ALWAYS add the universal
-docs. Read only these — never the whole `doc/` set:
+**Pass paths, not text.** Workers have the Read tool, and the payload is routing — the same
+pointers-not-content rule the graph slice already follows. Do NOT read these docs and paste them in;
+a pasted doc set is 4–8k *output* tokens per dispatch, re-emitted on every retry.
+
+List `doc/*.md` **once per run** (one glob, cached) so you know what actually exists. Then, from the
+`FILES` the slice returned, name the matching domain docs plus the universal ones — paths only, and
+only paths the glob confirmed. Naming a doc the project never scaffolded costs the worker a wasted
+turn on a failed Read.
 
 <!-- forge:shared-block source-doc-map -->
 - **Always:** `doc/architecture.md`, `doc/solution-structure.md`, `doc/coding-standard.md`, and
@@ -361,12 +367,30 @@ docs. Read only these — never the whole `doc/` set:
 - auth/token/permission/role sources → `doc/security.md`
 <!-- /forge:shared-block source-doc-map -->
 
+**One exception — paste `doc/design-brief.md` inline for UI subtasks.** It is about a page, and 5b's
+design check is the only one that hard-fails on a miss; that's cheaper than a re-loop.
+
+**What this means for the main session:** you never Read `architecture.md`, `solution-structure.md`
+or `coding-standard.md` at all, and you read `prd.md` only if Phase 5b's reviewer can't (it can —
+it reads its own). The one remaining on-demand read is Phase 0e's ambiguity scan, which fires only
+on a genuinely ambiguous request and once per run, not once per subtask.
+
 ### 3c. Instruction
 
 Assemble the worker prompt from: the subtask **goal** + **success criterion** + the graph slice
-(3a) + the doc slice text (3b) + these constraints, verbatim:
+(3a) + the doc paths (3b) + these constraints, verbatim. The read gate leads the block — it is a
+blocking precondition, not a footnote, and a worker that skims will still hit it first:
 
 ```
+FIRST — before writing any code, read these. They are the binding constraints for this subtask
+and you have not seen them:
+  doc/architecture.md        — tech stack, layers, design patterns
+  doc/solution-structure.md  — folder layout you must follow exactly
+  doc/coding-standard.md     — language + framework conventions
+  [any domain docs 3b's routing map selected, same one-line form]
+Read doc/prd.md only if this subtask names a `Builds: Fn` reference above.
+Do not start editing until you have read them.
+
 - Edit only the files needed for THIS subtask.
 - Write/update tests and run them; report results.
 - Keep lint/style clean — match the project's existing conventions.
