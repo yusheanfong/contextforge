@@ -368,6 +368,11 @@ Local only — nothing was pushed.
   Undo the merge:   git reset --hard [BASE_SHA]   (while on [BASE])
 ```
 
+**The `Merged:` block comes from 0e's output, not from a fresh query.** Once the merge lands,
+`git log [BASE]..[BRANCH]` and the diffstat are both empty by design — that is PHASE 2's pass
+condition. Re-running them here to fill in the report gets you zero commits and zero files for work
+that plainly landed, so carry 0e's commit list and file count forward instead.
+
 Drop the sub-branch line when there were none. If PHASE 0e found the branch already merged, say so
 in place of the `Merged:` block rather than printing zero commits as if work landed.
 
