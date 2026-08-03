@@ -134,6 +134,10 @@ flag — same shape as `/forge-contextmap sync` — and it must be parsed first 
 resolve correctly. Under `[BACKEND] = codex`, read `references/codex-backend.md` now and run its C1
 preflight before Phase 1; a preflight failure stops the run before anything is written.
 
+Announce the parse in one line — `Backend: codex — Claude plans and audits, Codex implements.` — and
+continue without blocking. A feature request whose own first word is "codex" would otherwise be
+silently mis-split, and this line makes that visible in time to correct it.
+
 Next, parse flags: if what remains contains **`--no-commit`**, set `[NO_COMMIT] = true`
 and strip the flag from the text. Otherwise `[NO_COMMIT] = false`. Under `[NO_COMMIT]` the pipeline
 runs every phase and gate but makes NO branch and NO commits — it leaves changes in the working

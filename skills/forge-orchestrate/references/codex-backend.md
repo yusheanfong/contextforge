@@ -137,14 +137,17 @@ codex exec \
   - Does the stated dependency order work, or does a subtask need something a later one builds?
   - Is any subtask architecturally wrong for this codebase?
   You are in a read-only sandbox and cannot run the test suite. That is expected — do not report
-  it as a finding.
+  it as a finding. Missing lint, coverage or SAST tooling is also not a finding: the gate runner
+  detects what exists and honestly skips the rest.
   Return execution_order using the subtask numbers exactly as written above, in the order they
   must run.
   Do not write code. Do not edit files.
   ```
-  Both carve-outs are load-bearing and were added after a fixture run: without the first, the audit
-  reports every new file the plan creates as a missing path and drowns the real findings; without the
-  second, every round emits a spurious "pytest could not start" finding.
+  All three carve-outs are load-bearing and were added after fixture runs. Without the first, the
+  audit reports every new file the plan creates as a missing path and drowns the real findings.
+  Without the second, every round emits a spurious "pytest could not start" finding. Without the
+  third, any repo with no linter burns a round on "the lint gate is not verifiable" — which 5a
+  already handles by design, so rewriting a subtask over it is pure waste.
 
 ### The loop — bounded at 3 rounds
 
@@ -190,13 +193,19 @@ cheap insurance. The file list is neither trusted nor discarded — it is one of
 `git add -A`) all need the list of files this subtask changed. In the Claude backend that list is a
 worker return-contract item. Codex's self-report is not trustworthy enough to stage commits from.
 
+**Snapshot the tree Codex is actually editing.** In worktree mode that is the worktree, not this
+session's cwd — the same trap 5b's *"Where the reviewer runs `git diff`"* section exists for. A
+bare `git status` there returns the main checkout, the delta comes back empty, and C7's own rule
+("delta empty after execute → re-dispatch") then burns all three 5c iterations on a subtask that
+worked. Use the `-C` form whenever `-C` was passed to `codex exec`:
+
 Immediately **before** dispatch:
 
 ```bash
-git status --porcelain > graphify-out/.orchestrate_before_<n>.txt
+git -C <same dir codex exec runs in> status --porcelain > graphify-out/.orchestrate_before_<n>.txt
 ```
 
-After it returns, run `git status --porcelain` again and take the delta. `--porcelain` is used rather
+After it returns, run the identical command again and take the delta. `--porcelain` is used rather
 than `git diff --name-only` because it also reports untracked files, which a new-file subtask
 produces. Note it can report a whole **directory** (`?? src/__pycache__/`), not only files — match on
 the path prefix, not on exact filenames.
@@ -229,8 +238,11 @@ but did not report is either build output (harmless, and the user can gitignore 
 5c's rule is *resume, not respawn*. The Codex equivalent of `SendMessage` is:
 
 ```bash
-codex exec resume <session id> -s workspace-write - < graphify-out/.orchestrate_retry_<n>.txt
+codex exec resume <session id> -s workspace-write -C <same dir as the original dispatch> \
+  - < graphify-out/.orchestrate_retry_<n>.txt
 ```
+
+`-C` must match the original dispatch — in worktree mode a resume without it edits the wrong tree.
 
 The retry payload is the failure log alone — the gate output, the reviewer's `FAILURES` lines, or the
 delete-list. Not the original payload: the session still holds every file it read and every edit it
@@ -253,6 +265,6 @@ entirely.
 |---|---|---|
 | Codex reports a file it could not write | path outside the writable root | add `--add-dir <path>` and retry that subtask |
 | Empty or unparseable `-o` file after an audit | run died before its final turn | treat as a failed round; it still counts against the 3 |
-| `git status` delta is empty after execute | Codex answered without editing, or was killed mid-run | do not mark the subtask passed — re-dispatch with the goal restated |
+| `git status` delta is empty after execute | **check the snapshot cwd first** (C5) — in worktree mode a bare `git status` reads the main checkout and always comes back empty. Otherwise Codex answered without editing, or was killed mid-run | fix the `-C`; if the cwd was right, re-dispatch with the goal restated |
 | Reconciled delta contains files from an unrelated subtask | `[NO_COMMIT]`, no moving baseline | expected; 5b's out-of-scope note (single-tree `[NO_COMMIT]`) covers it |
 | `NEEDS_CONTEXT` in the final message | Codex lacked a doc or file | supply it and re-dispatch via C6, same as a Claude worker |
