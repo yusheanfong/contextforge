@@ -30,6 +30,7 @@ Then, inside your project:
 ```
 /forge-contextmap          # once — scaffolds doc/ + CLAUDE.md, builds the graph
 /forge-orchestrate         # builds the next task off doc/task-list.md, on a branch
+                           # add `codex` to keep planning on Claude and execute on Codex
                            # → review the diff
 /forge-merge               # lands that branch, verifies it, deletes it
 /forge-contextmap sync     # pulls the fresh graph back into your docs
@@ -233,6 +234,7 @@ rm -f ~/.claude/commands/forge-*.md   # only if you ever used a pre-skill instal
 - Claude Code. Any version for the manual install — the skills themselves use no version-gated
   features. The **plugin** install additionally needs a build with plugin support: run
   `claude plugin --help` and check that `marketplace` is listed. Verified on 2.1.220.
+- Codex CLI — only for `/forge-orchestrate codex`; the default Claude backend does not need it.
 - Python 3.10+ — for existing-project analysis, `/forge-contextmap sync`, `/forge-orchestrate`, and
   `/forge-audit` (all read the graph). **Not** required for new-project scaffolding.
   `/forge-contextmap` installs Graphify automatically when it needs it.
