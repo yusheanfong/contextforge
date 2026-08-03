@@ -180,7 +180,7 @@ List every file you created or modified, one path per line, under a final "FILES
 ```
 
 The commit ban is already in 3c, but Codex has its own git tooling and a second explicit statement is
-cheap insurance. The file list is cross-checked, not trusted — see C5.
+cheap insurance. The file list is neither trusted nor discarded — it is one of two inputs to C5.
 
 ---
 
@@ -196,20 +196,31 @@ Immediately **before** dispatch:
 git status --porcelain > graphify-out/.orchestrate_before_<n>.txt
 ```
 
-After it returns, run `git status --porcelain` again and take the delta. That delta is the
-authoritative list. `--porcelain` is used rather than `git diff --name-only` because it also reports
-untracked files, which a new-file subtask produces.
+After it returns, run `git status --porcelain` again and take the delta. `--porcelain` is used rather
+than `git diff --name-only` because it also reports untracked files, which a new-file subtask
+produces. Note it can report a whole **directory** (`?? src/__pycache__/`), not only files — match on
+the path prefix, not on exact filenames.
 
-Two mandatory filters and one check:
+**Two inputs, three outcomes.** Intersect the git delta with Codex's `FILES CHANGED:` list:
 
-- **Drop every path under `graphify-out/`.** That directory is not guaranteed to be gitignored, and
-  this backend writes payload, schema, snapshot and audit files into it. Unfiltered, they would be
-  staged as if Codex authored them.
-- **Drop nothing else.** A file Codex touched that the subtask did not ask for is a 5b review
-  failure, not something to hide.
-- **Cross-check Codex's `FILES CHANGED:` list against the delta.** If Codex names a path git does not
-  show, surface the mismatch in the Phase 6 report rather than swallowing it — it usually means a
-  sandbox denial or an edit to a path outside the writable root.
+| In git delta | Claimed by Codex | Outcome |
+|---|---|---|
+| yes | yes | **the authoritative list** — this is what 5b diffs and 5d stages |
+| yes | no | **report, never stage.** Print it in the Phase 6 report as `unclaimed changes` |
+| no | yes | **report.** Usually a sandbox denial or a path outside the writable root |
+
+Neither list alone works. Git alone stages junk: a fixture run showed that a subtask which runs
+`pytest` — which Phase 4 mandates — leaves `src/__pycache__/` and `tests/__pycache__/` in the delta,
+and `git add`ing those into a feature commit is a real defect, not a cosmetic one. Codex's list alone
+is a self-report, which is exactly what must not be trusted to stage a commit.
+
+Before intersecting, **drop every path under `graphify-out/`** from the delta unconditionally. That
+directory is not guaranteed to be gitignored, and this backend writes payload, schema, snapshot and
+audit files into it.
+
+The `unclaimed changes` row is deliberately loud rather than silently filtered: a file Codex touched
+but did not report is either build output (harmless, and the user can gitignore it) or scope creep
+(a 5b review failure). Suppressing it would hide the second case.
 
 ---
 

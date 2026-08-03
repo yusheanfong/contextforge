@@ -734,7 +734,8 @@ When all subtasks are complete:
    Audit:       [N] round(s) — verified on round [N]
    ```
    plus, for any subtask where Codex's `FILES CHANGED:` list disagreed with the git delta (§C5),
-   one line naming the mismatched paths. Never suppress it.
+   an `unclaimed changes:` line naming those paths. Never suppress it — it is either build output
+   the user should gitignore, or scope creep.
 7. Clean up:
    - Remove `graphify-out/.orchestrate_slice.py`, and every other `graphify-out/.orchestrate_*`
      scratch file the run created (payloads, snapshots, audit schema and audit rounds under
