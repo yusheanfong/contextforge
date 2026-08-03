@@ -1,7 +1,7 @@
 ---
 name: forge-orchestrate
-description: CI/CD-gated autonomous feature pipeline (/forge-orchestrate). Use when building a feature end-to-end against the knowledge graph — decompose, branch, dispatch graph-scoped worker subagents, run lint/test/secrets/over-engineering gates, commit per subtask. Also use to execute a /forge-diagnose handoff. Triggers include "/forge-orchestrate", "orchestrate this feature", "build the next task", "run the pipeline", "execute the diagnosis".
-argument-hint: "[feature | doc/diagnosis-*.md] [--no-commit]"
+description: CI/CD-gated autonomous feature pipeline (/forge-orchestrate). Use when building a feature end-to-end against the knowledge graph — decompose, branch, dispatch graph-scoped worker subagents, run lint/test/secrets/over-engineering gates, commit per subtask. The `codex` subcommand keeps planning and review on Claude and hands implementation to the Codex CLI. Also use to execute a /forge-diagnose handoff. Triggers include "/forge-orchestrate", "/forge-orchestrate codex", "orchestrate this feature", "build the next task", "run the pipeline", "execute the diagnosis", "plan on Claude execute on Codex".
+argument-hint: "[codex] [feature | doc/diagnosis-*.md] [--no-commit]"
 ---
 
 # /forge-orchestrate — CI/CD-Gated Autonomous Feature Pipeline
@@ -21,6 +21,12 @@ Reads `$ARGUMENTS` as the feature request, or as the path to a `/forge-diagnose`
 `main` — you own releases. Pass **`--no-commit`** to run the full pipeline + gates with zero git
 writes (you review the working tree and commit yourself).
 
+**`codex` subcommand** — `/forge-orchestrate codex <feature>` keeps decomposition, audit and review
+on Claude and hands implementation to the Codex CLI. It adds one phase the Claude path does not have:
+Codex audits the decomposition read-only **before** any code is written (1b), because a plan flaw is
+cheapest to fix while it is still a plan. Everything else is identical, `--no-commit` still composes,
+and the main session still owns every git write.
+
 **Roles (mapped from the multi-agent blueprint):** Coordinator = intent-parse + decompose · Engineer
 = worker subagent that edits code + writes tests · QA/Critic = the CI gate runner + review loop ·
 Synthesis = final report + release-readiness.
@@ -34,6 +40,7 @@ Synthesis = final report + release-readiness.
 | File | Read when |
 |---|---|
 | `references/graph-slice.md` | Phase 3a — always (the slice script lives there) |
+| `references/codex-backend.md` | `[BACKEND] = codex` — read right after 0d, before Phase 1 |
 | `references/task-list-formats.md` | `doc/task-list.md` exists (Phase 0d + Phase 6) |
 | `references/worktree-mode.md` | a batch has 2+ independent subtasks AND `[NO_COMMIT]` is false |
 | `references/release-readiness.md` | Phase 6 |
@@ -120,7 +127,18 @@ Do not force a sync. Continue.
 
 ### 0d. Resolve the request
 
-First, parse flags out of `$ARGUMENTS`: if it contains **`--no-commit`**, set `[NO_COMMIT] = true`
+First, parse the **backend subcommand**: if `$ARGUMENTS` starts with the bare word **`codex`**, set
+`[BACKEND] = codex` and strip that word. Otherwise `[BACKEND] = claude`. It is a subcommand, not a
+flag — same shape as `/forge-contextmap sync` — and it must be parsed first so that both
+`/forge-orchestrate codex --no-commit <feature>` and `/forge-orchestrate codex doc/diagnosis-x.md`
+resolve correctly. Under `[BACKEND] = codex`, read `references/codex-backend.md` now and run its C1
+preflight before Phase 1; a preflight failure stops the run before anything is written.
+
+Announce the parse in one line — `Backend: codex — Claude plans and audits, Codex implements.` — and
+continue without blocking. A feature request whose own first word is "codex" would otherwise be
+silently mis-split, and this line makes that visible in time to correct it.
+
+Next, parse flags: if what remains contains **`--no-commit`**, set `[NO_COMMIT] = true`
 and strip the flag from the text. Otherwise `[NO_COMMIT] = false`. Under `[NO_COMMIT]` the pipeline
 runs every phase and gate but makes NO branch and NO commits — it leaves changes in the working
 tree for the user to review and commit.
@@ -213,6 +231,19 @@ Subtask 2: [goal]
 
 Running now. I'll stop only if a request is ambiguous or a gate fails 3×.
 ```
+
+### 1b. Spec audit *(codex backend only — skip entirely when `[BACKEND] = claude`)*
+
+Before any code is written, Codex audits the decomposition read-only. Follow
+`references/codex-backend.md` §C3 — it carries the schema, the invocation and the payload.
+
+- `verified` → Phase 2.
+- `flawed` → rewrite **only the subtasks the findings name**, leave the rest byte-identical, re-audit.
+- **At most 3 rounds.** After the 3rd `flawed`, stop, print every round's verdict plus the full
+  findings, and hand back. There is no 4th audit.
+- If the audit's `execution_order` contradicts the `depends on` fields above, reconcile it **here, in
+  the decomposition** — never let Phase 4 silently pick one. Phase 4 follows the reconciled
+  dependencies; the final round's `execution_order` only breaks ties the dependencies leave open.
 
 ---
 
@@ -432,6 +463,11 @@ the diagnosis — do not re-investigate: [list]."
 
 ## PHASE 4: Execution *(Worker = Engineer agent)*
 
+**If `[BACKEND] = codex`**, the payload assembled in Phase 3 is used verbatim — that reuse is the
+point — but it goes to `codex exec` instead of the Agent tool. Follow `references/codex-backend.md`
+§C2, §C4 and §C5 for dispatch, and ignore only the Agent-tool paragraph and the model-selection
+paragraph below. The dispatch-mode section and everything from Phase 5 on still apply.
+
 Use the Agent tool. **Default `subagent_type` is `general-purpose`** (the documented catch-all);
 use `Explore`/`Plan` only for read-only research subtasks.
 
@@ -443,7 +479,8 @@ code + write tests + run them, and do **NOT** commit. Committing happens in Phas
 
 **Record every dispatched worker's agent ID/name in its subtask state (`agent_id`).** 5c resumes
 that live agent instead of respawning it, and without the ID there is nothing to resume. This
-applies to both dispatch modes below.
+applies to both dispatch modes below. Under `[BACKEND] = codex`, `agent_id` holds the session id
+`codex exec` prints on stdout.
 
 ### Dispatch mode — worktrees vs. single tree
 
@@ -520,7 +557,10 @@ Assemble the reviewer payload from:
 
 - the subtask **goal** + **success criterion**
 - **the diff command**, with the right cwd for the dispatch mode (see below) and scoped to the files
-  the worker reported changing
+  the worker reported changing. Under `[BACKEND] = codex` that scope comes from the git snapshot
+  delta in `references/codex-backend.md` §C5, not from the worker's self-report — everywhere below
+  that says "the files the worker reported", read "the reconciled list". The reviewer itself is
+  unchanged: still a read-only **Claude** subagent, because the executor must not grade its own diff.
 - the minimal-code ladder — paste the block below into the payload. A subagent sees only its
   dispatch payload, never this file:
   <!-- forge:shared-block minimal-ladder -->
@@ -605,6 +645,10 @@ including every file it read and every edit it made, so you send only the error 
 payload. Spawn a fresh `Agent` **only** if that agent is gone; that path re-sends the whole payload
 and the worker has to re-read everything it already read.
 
+Under `[BACKEND] = codex`, "resume" means `codex exec resume <session id>` — see
+`references/codex-backend.md` §C6, which also carries the fallback for a session that cannot be
+resumed. It is never `SendMessage`.
+
 **Bounded loop: at most 3 iterations per subtask.** If still failing after 3, stop the loop and
 report it to the user — do not loop further.
 
@@ -628,7 +672,9 @@ its changes in the working tree.
 
 1. Process passing subtasks **one at a time**, in completion order. Two `git commit`s never run at
    once (the working tree + index are shared mutable state).
-2. Stage **only the files that THIS subtask's worker reported changing** — never `git add -A`:
+2. Stage **only the files that THIS subtask's worker reported changing** — never `git add -A`.
+   Under `[BACKEND] = codex` that is the reconciled list from `references/codex-backend.md` §C5,
+   which is also why `graphify-out/` scratch files never reach the index:
    ```bash
    git add [exact files this worker reported]
    git commit -m "[concise subtask summary]"
@@ -686,8 +732,18 @@ When all subtasks are complete:
    On branch [BRANCH] — run /forge-merge when you're happy to land it and clean up.
    ```
    If `[FROM_DIAGNOSIS]` is true, add one line naming the source: `Fixes: doc/diagnosis-<slug>.md`.
+   If `[BACKEND] = codex`, add two lines above `Files changed:`:
+   ```
+   Backend:     codex
+   Audit:       [N] round(s) — verified on round [N]
+   ```
+   plus, for any subtask where Codex's `FILES CHANGED:` list disagreed with the git delta (§C5),
+   an `unclaimed changes:` line naming those paths. Never suppress it — it is either build output
+   the user should gitignore, or scope creep.
 7. Clean up:
-   - Remove `graphify-out/.orchestrate_slice.py`.
+   - Remove `graphify-out/.orchestrate_slice.py`, and every other `graphify-out/.orchestrate_*`
+     scratch file the run created (payloads, snapshots, audit schema and audit rounds under
+     `[BACKEND] = codex`).
    - **Worktree mode:** follow the cleanup section of `references/worktree-mode.md`.
 
 ---
