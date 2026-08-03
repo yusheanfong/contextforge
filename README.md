@@ -459,6 +459,11 @@ Claude still decomposes, reviews and commits. Codex does the implementation. Two
   is still cheap.
 - **Phase 4 dispatches `codex exec`** with the same graph-sliced payload a Claude worker would get.
 
+The two phases run on different Codex tiers, passed explicitly with `-m` so nothing depends on your
+config default: the audit on **`gpt-5.6-sol`** (it is the judgment step, and it is cheap — read-only,
+~2 minutes), execution on **`gpt-5.6-terra`**, or `sol` for a subtask involving multi-file
+integration or design judgment.
+
 What does *not* change: the graph slice, the doc slice, the CI gates, the reviewer (still a Claude
 subagent — an executor grading its own diff is the weakest possible critic), and the git policy.
 Codex is forbidden from touching git; the main session stages from a `git status --porcelain`
