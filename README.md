@@ -429,7 +429,7 @@ Flow:
 3. **Branch** — creates `feature/<slug>` and works there
 4. **Decompose** the task into subtasks (goal, success criterion, dependencies, gate set). Run with no arguments and it picks the next eligible task from the engineering plan — dependency-aware — and uses that task's own acceptance criteria as the success criteria
 5. **Graph slice per subtask** — reads `graph.json`, walks the touched nodes' neighborhood (falling back to their community only when that comes back nearly empty), and hands the worker a ranked, capped file list plus the *paths* of the matching `doc/*` files (plus the universal docs: architecture, structure, standards, and the PRD as scope guard). Paths, not pasted text — the worker reads them itself. UI subtasks get `design-brief.md` + `app-flow.md`; data/API subtasks get `backend-schema.md` when it exists
-6. **Dispatch workers** — 2+ independent subtasks each run in an isolated **git worktree** (real parallelism, overlapping edits surface as a visible merge conflict); lone/dependent subtasks run single-tree
+6. **Dispatch workers** — 2+ independent subtasks each run in an isolated **git worktree** (real parallelism, overlapping edits surface as a visible merge conflict); lone/dependent subtasks run single-tree. The backend is a Claude subagent by default, or `codex exec` under the `codex` subcommand (below)
 7. **CI gates** — adaptive and honest: lint, tests, coverage, dependency-vuln, secrets (hard block), SAST, over-engineering. Runs what your project has, skips + *honestly reports* what it doesn't — never a fake green check
 8. **Bounded review loop** — spec (against the PRD feature the task `Builds:`), then quality, then an over-engineering pass, then **design compliance** on UI subtasks (every color/font/spacing in the diff must come from `design-brief.md` tokens — ad-hoc hex values fail review); max 3 iterations per subtask
 9. **Commit per subtask** on the branch once its gates pass
@@ -441,6 +441,39 @@ out once you're happy. Pass **`--no-commit`** to run the full pipeline and
 all gates with zero git writes — changes are left in the working tree for you to review and commit
 yourself. `/forge-orchestrate` never rebuilds the graph (that's `/forge-contextmap sync` or the post-commit
 hook), so commit or sync first if you have uncommitted structural changes.
+
+#### `codex` — plan on Claude, execute on Codex
+
+```
+/forge-orchestrate codex add input validation to the checkout endpoint
+/forge-orchestrate codex --no-commit <feature>
+```
+
+Claude still decomposes, reviews and commits. Codex does the implementation. Two things change:
+
+- **A pre-execution audit (Phase 1b).** Before any code is written, Codex audits the decomposition
+  read-only and returns a structured verdict — missing imports, paths the plan names that don't
+  exist, unverifiable success criteria, a dependency order that can't work. `flawed` sends only the
+  named subtasks back to Claude for a rewrite; **at most 3 rounds**, then it stops and hands you the
+  findings. The existing review loop catches bad *code*; this catches a bad *plan*, while fixing it
+  is still cheap.
+- **Phase 4 dispatches `codex exec`** with the same graph-sliced payload a Claude worker would get.
+
+What does *not* change: the graph slice, the doc slice, the CI gates, the reviewer (still a Claude
+subagent — an executor grading its own diff is the weakest possible critic), and the git policy.
+Codex is forbidden from touching git; the main session stages from a `git status --porcelain`
+before/after delta rather than trusting the executor's self-report.
+
+**Setup, once.** Codex reads `AGENTS.md`, not `CLAUDE.md`, so the `CLAUDE.md` that `/forge-contextmap`
+generates needs one line in `~/.codex/config.toml` to reach it:
+
+```toml
+project_doc_fallback_filenames = ["CLAUDE.md"]
+```
+
+The skill checks for this and stops with that exact line if it's missing. It also stops if the repo
+has **both** `AGENTS.md` and `CLAUDE.md` — `AGENTS.md` wins and your ContextForge rules would be
+silently dropped.
 
 ---
 
@@ -559,7 +592,8 @@ the handoff has to be written, so `Write` is present — the guarantee that noth
 | `--new` | `/forge-contextmap` | Force the new-project interview even when source files exist |
 | `--graph-only` | `/forge-audit` | Skip source confirmation — faster, less precise, every finding tagged `[unconfirmed]` |
 
-`/forge-contextmap sync` is a subcommand, not a flag. `/forge-audit` also takes a bare path prefix
+`/forge-contextmap sync` and `/forge-orchestrate codex` are subcommands, not flags — they lead the
+argument list, and `codex` composes with `--no-commit`. `/forge-audit` also takes a bare path prefix
 (`/forge-audit src/checkout`) to scope the sweep. `/forge-merge` has no flags — it takes an optional
 bare branch name and defaults to the branch you're on.
 
@@ -581,6 +615,11 @@ asking for approval at every step. It interrupts you in exactly these cases:
 - **No test runner detected** — warns loudly and asks once, because the success criterion can't be
   verified. Records `unverified — no test tooling` in the results either way. Never a fake green.
 - **A gate fails 3×** — stops and reports. Bounded loop, never infinite.
+- **`codex` preflight fails** — no Codex CLI, no `project_doc_fallback_filenames`, or the repo has
+  both `AGENTS.md` and `CLAUDE.md`. Prints the exact fix and stops before writing anything. It never
+  edits your `~/.codex/config.toml`.
+- **The `codex` spec audit stays `flawed` after 3 rounds** — stops, prints every round's findings,
+  and hands the plan back to you. Never a 4th audit.
 
 And two things it never does, regardless: **tag a release**, or **merge to `main`**. It leaves you
 on the feature branch. You own the merge.
