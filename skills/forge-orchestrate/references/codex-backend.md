@@ -71,6 +71,41 @@ starts. Grab it and store it in the subtask's existing `agent_id` slot — C6 re
 
 **Worktree mode** — pass `-C <worktree abs path>` so Codex's working root is that checkout.
 
+**Always pass `-m` explicitly.** Without it every dispatch silently inherits whatever `model =` sits
+in the user's `~/.codex/config.toml`, which makes the audit's quality a function of an unrelated
+setting. This replaces the model-selection paragraph in Phase 4, which applies to Agent-tool workers
+only.
+
+| Phase | Model | Why |
+|---|---|---|
+| **C3 audit** | `gpt-5.6-sol` | The audit exists to catch what a cheap pass won't — "this subtask is architecturally wrong for this codebase", not just "this path does not exist". It is also the cheap phase: read-only, ~2 minutes, and one caught plan flaw saves a whole execute round. |
+| **C4 execute** | `gpt-5.6-terra` | Default. Mini-like tier, right for mechanical 1–2 file edits against a clear spec. |
+| **C4 execute** | `gpt-5.6-sol` | For a subtask involving multi-file integration or design judgment — the same distinction Phase 4 draws for Claude workers. |
+
+Tier descriptions are the CLI's own: `sol` is *"flagship … for hardest quality-first, coding, and
+reasoning workflows"*, `terra` is *"mini-like … for balanced cost, latency, and quality"*.
+
+The audit row is a measured result, not a preference. Same fixture, same schema, same prompt: `terra`
+returned criterion-wording nits, while `sol` caught that the plan's central term was undefined
+("valid code" with no codes or rates specified), cross-checked the plan against the project
+`CLAUDE.md`'s two-decimal rounding rule, and read the source to find that `checkout()` returns a dict
+so "returns the discounted amount" names nothing real. Those are the findings that stop a wasted
+execute round; the nits are not. Both ran ~2 minutes.
+
+A model id this account cannot use **fails loudly** — verified, not assumed. `codex exec` exits `1`
+and prints:
+
+```
+warning: Model metadata for `<id>` not found. Defaulting to fallback metadata; this can degrade
+performance and cause issues.
+ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The '<id>'
+model is not supported when using Codex with a ChatGPT account."}}
+```
+
+Note the warning line alone is not fatal — it precedes the real error. Branch on the **exit code**,
+not on the presence of `warning:`. A non-zero exit here is a stopped run, not a degraded one, so
+report it and stop rather than retrying: no `-m` value will fix an account that lacks the model.
+
 ---
 
 ## C3. Audit — Phase 1b
@@ -115,6 +150,7 @@ preamble. The `-o` file holds the schema'd object alone, with no prose around it
 
 ```bash
 codex exec \
+  -m gpt-5.6-sol \
   -s read-only \
   --output-schema graphify-out/.orchestrate_audit_schema.json \
   -o graphify-out/.orchestrate_audit_round<N>.json \
@@ -168,9 +204,10 @@ for subtasks the deps leave unordered.
 ## C4. Execute — Phase 4
 
 ```bash
-codex exec -s workspace-write - < graphify-out/.orchestrate_payload_<n>.txt
+codex exec -m gpt-5.6-terra -s workspace-write - < graphify-out/.orchestrate_payload_<n>.txt
 ```
 
+Use `-m gpt-5.6-sol` instead when the subtask is multi-file integration or design judgment (C2).
 Add `-C <worktree abs path>` in worktree mode, `--add-dir <path>` per C1.4. Run in the background per
 C2.
 
@@ -238,8 +275,8 @@ but did not report is either build output (harmless, and the user can gitignore 
 5c's rule is *resume, not respawn*. The Codex equivalent of `SendMessage` is:
 
 ```bash
-codex exec resume <session id> -s workspace-write -C <same dir as the original dispatch> \
-  - < graphify-out/.orchestrate_retry_<n>.txt
+codex exec resume <session id> -m <same model as the original dispatch> -s workspace-write \
+  -C <same dir as the original dispatch> - < graphify-out/.orchestrate_retry_<n>.txt
 ```
 
 `-C` must match the original dispatch — in worktree mode a resume without it edits the wrong tree.
@@ -263,6 +300,7 @@ entirely.
 
 | Symptom | Cause | Response |
 |---|---|---|
+| Exit 1 with a 400 `invalid_request_error` naming the model | the account cannot use that `-m` id | report and stop — retrying cannot fix it (C2) |
 | Codex reports a file it could not write | path outside the writable root | add `--add-dir <path>` and retry that subtask |
 | Empty or unparseable `-o` file after an audit | run died before its final turn | treat as a failed round; it still counts against the 3 |
 | `git status` delta is empty after execute | **check the snapshot cwd first** (C5) — in worktree mode a bare `git status` reads the main checkout and always comes back empty. Otherwise Codex answered without editing, or was killed mid-run | fix the `-C`; if the cwd was right, re-dispatch with the goal restated |
