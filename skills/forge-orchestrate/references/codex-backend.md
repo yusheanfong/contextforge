@@ -113,6 +113,13 @@ An execute dispatch stores the id in the subtask's existing `agent_id` slot for 
 stores it in `council.round2_session_id` for round 3. Keep the two apart — they are different
 sessions with different sandboxes.
 
+**Never detect completion by grepping the log for text that appears in the payload.** `codex exec`
+echoes the whole prompt to stdout before the turn starts, so a `FILES CHANGED` grep matches the
+instruction that *asked* for the list, not the answer, and reports a finished run seconds after
+dispatch. Any sentinel drawn from the payload self-matches this way. Wait on the background
+dispatch's own exit; if you must poll the log, match the run trailer `^tokens used`, which only the
+finished turn writes. For a council round the `-o` file appearing is the same signal.
+
 **Worktree mode** — pass `-C <worktree abs path>` so Codex's working root is that checkout.
 
 **Always pass `-m` explicitly, and on planning calls `-c 'model_reasoning_effort="high"'` too.**
@@ -586,6 +593,7 @@ entirely.
 | Symptom | Cause | Response |
 |---|---|---|
 | Exit 1 with a 400 `invalid_request_error` naming the model | the account cannot use that `-m` id | report and stop — retrying cannot fix it (C2) |
+| A dispatch looks finished seconds after it started | the completion check grepped for a string the payload also contains, and matched the echoed prompt | wait on the dispatch's exit, or match `^tokens used` (C2) |
 | `error: unexpected argument '-s' found` on a retry | `-s`/`-C` placed after `resume` | move them before the subcommand (C6) |
 | Codex reports a file it could not write | path outside the writable root | add `--add-dir <path>` and retry that subtask |
 | Empty or unparseable `-o` file after a council round | run died before its final turn | it still counts against the 3 — degrade per C3, never score it `verified` |
