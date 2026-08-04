@@ -30,7 +30,7 @@ Then, inside your project:
 ```
 /forge-contextmap          # once — scaffolds doc/ + CLAUDE.md, builds the graph
 /forge-orchestrate         # builds the next task off doc/task-list.md, on a branch
-                           # add `codex` to keep planning on Claude and execute on Codex
+                           # add `codex` to plan as a Claude+Codex council and execute on Codex
                            # → review the diff
 /forge-merge               # lands that branch, verifies it, deletes it
 /forge-contextmap sync     # pulls the fresh graph back into your docs
@@ -429,7 +429,7 @@ Flow:
 1. **Hard stop** if no `graphify-out/graph.json` — run `/forge-contextmap` first
 2. **Clarify only if ambiguous** — asks about scope/criteria only for a genuinely unclear request; otherwise states its assumptions and runs hands-off
 3. **Branch** — creates `feature/<slug>` and works there
-4. **Decompose** the task into subtasks (goal, success criterion, dependencies, gate set). Run with no arguments and it picks the next eligible task from the engineering plan — dependency-aware — and uses that task's own acceptance criteria as the success criteria
+4. **Decompose** the task into subtasks (goal, success criterion, dependencies, gate set). Run with no arguments and it picks the next eligible task from the engineering plan — dependency-aware — and uses that task's own acceptance criteria as the success criteria. Under the `codex` subcommand this step becomes a two-agent **planning council** (below)
 5. **Graph slice per subtask** — reads `graph.json`, walks the touched nodes' neighborhood (falling back to their community only when that comes back nearly empty), and hands the worker a ranked, capped file list plus the *paths* of the matching `doc/*` files (plus the universal docs: architecture, structure, standards, and the PRD as scope guard). Paths, not pasted text — the worker reads them itself. UI subtasks get `design-brief.md` + `app-flow.md`; data/API subtasks get `backend-schema.md` when it exists
 6. **Dispatch workers** — 2+ independent subtasks each run in an isolated **git worktree** (real parallelism, overlapping edits surface as a visible merge conflict); lone/dependent subtasks run single-tree. The backend is a Claude subagent by default, or `codex exec` under the `codex` subcommand (below)
 7. **CI gates** — adaptive and honest: lint, tests, coverage, dependency-vuln, secrets (hard block), SAST, over-engineering. Runs what your project has, skips + *honestly reports* what it doesn't — never a fake green check
@@ -451,20 +451,36 @@ hook), so commit or sync first if you have uncommitted structural changes.
 /forge-orchestrate codex --no-commit <feature>
 ```
 
-Claude still decomposes, reviews and commits. Codex does the implementation. Two things change:
+Claude still synthesizes, reviews, decides and commits. Codex supplies a second independent planning
+judgment and does the implementation. Two things change:
 
-- **A pre-execution audit (Phase 1b).** Before any code is written, Codex audits the decomposition
-  read-only and returns a structured verdict — missing imports, paths the plan names that don't
-  exist, unverifiable success criteria, a dependency order that can't work. `flawed` sends only the
-  named subtasks back to Claude for a rewrite; **at most 3 rounds**, then it stops and hands you the
-  findings. The existing review loop catches bad *code*; this catches a bad *plan*, while fixing it
-  is still cheap.
+- **A planning council (Phase 1b).** Before any code is written, at most **3 read-only Codex calls**:
+
+  1. **Codex proposes first, from the original task** — its own subtasks, criteria, dependencies,
+     expected files, risks and order. It does **not** see Claude's decomposition, which does not
+     exist yet. That ordering is the point: the old one-way audit showed Codex Claude's plan first,
+     so it could catch a path that doesn't exist but never propose a different cut of the work.
+  2. **Claude synthesizes both** against live repository evidence and records what it overrode and
+     why.
+  3. **Codex critiques the synthesis** and returns a structured verdict. `verified` stops the council
+     right there, at two calls — the common case. `flawed` sends only the named subtasks back for a
+     rewrite, and one final call verifies them.
+
+  If a disagreement survives the last call, Claude's plan is authoritative — but the run **prints
+  Codex's objection and its risk and asks you before executing**. It never claims a consensus it
+  didn't reach. The existing review loop catches bad *code*; this catches a bad *plan*, while fixing
+  it is still cheap.
 - **Phase 4 dispatches `codex exec`** with the same graph-sliced payload a Claude worker would get.
 
-The two phases run on different Codex tiers, passed explicitly with `-m` so nothing depends on your
-config default: the audit on **`gpt-5.6-sol`** (it is the judgment step, and it is cheap — read-only,
-~2 minutes), execution on **`gpt-5.6-terra`**, or `sol` for a subtask involving multi-file
-integration or design judgment.
+The phases run on different Codex tiers, passed explicitly with `-m` (and `-c
+model_reasoning_effort`) so nothing depends on your config default: every council call on
+**`gpt-5.6-sol`** at `high` effort — planning is where a cheap pass fails silently, returning wording
+nits instead of "this subtask is architecturally wrong for this codebase" — and execution on
+**`gpt-5.6-terra`**, or `sol` for a subtask involving multi-file integration or design judgment.
+`sol`/`high` is the planning tier, not a blanket default.
+
+Planning writes nothing: every council call runs in a `read-only` sandbox and is told not to run
+tests, edit files, branch, stage or commit.
 
 What does *not* change: the graph slice, the doc slice, the CI gates, the reviewer (still a Claude
 subagent — an executor grading its own diff is the weakest possible critic), and the git policy.
@@ -625,8 +641,10 @@ asking for approval at every step. It interrupts you in exactly these cases:
 - **`codex` preflight fails** — no Codex CLI, no `project_doc_fallback_filenames`, or the repo has
   both `AGENTS.md` and `CLAUDE.md`. Prints the exact fix and stops before writing anything. It never
   edits your `~/.codex/config.toml`.
-- **The `codex` spec audit stays `flawed` after 3 rounds** — stops, prints every round's findings,
-  and hands the plan back to you. Never a 4th audit.
+- **The `codex` planning council ends unresolved** — a critique Claude couldn't resolve, or a round
+  that returned nothing usable. Claude finalizes the plan either way, then prints Codex's objection
+  and its risk and asks before executing. Never a 4th planning call, and never a run that claims
+  consensus it didn't reach. A council that agrees doesn't stop at all.
 
 And two things it never does, regardless: **tag a release**, or **merge to `main`**. It leaves you
 on the feature branch. You own the merge.
