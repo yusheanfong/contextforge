@@ -1,6 +1,6 @@
 ---
 name: forge-orchestrate
-description: CI/CD-gated autonomous feature pipeline (/forge-orchestrate). Use when building a feature end-to-end against the knowledge graph — decompose, branch, dispatch graph-scoped worker subagents, run lint/test/secrets/over-engineering gates, commit per subtask. The `codex` subcommand keeps planning and review on Claude and hands implementation to the Codex CLI. Also use to execute a /forge-diagnose handoff. Triggers include "/forge-orchestrate", "/forge-orchestrate codex", "orchestrate this feature", "build the next task", "run the pipeline", "execute the diagnosis", "plan on Claude execute on Codex".
+description: CI/CD-gated autonomous feature pipeline (/forge-orchestrate). Use when building a feature end-to-end against the knowledge graph — decompose, branch, dispatch graph-scoped worker subagents, run lint/test/secrets/over-engineering gates, commit per subtask. The `codex` subcommand plans through a Claude+Codex planning council, keeps review on Claude, and hands implementation to the Codex CLI. Also use to execute a /forge-diagnose handoff. Triggers include "/forge-orchestrate", "/forge-orchestrate codex", "orchestrate this feature", "build the next task", "run the pipeline", "execute the diagnosis", "plan on Claude execute on Codex", "planning council".
 argument-hint: "[codex] [feature | doc/diagnosis-*.md] [--no-commit]"
 ---
 
@@ -21,26 +21,33 @@ Reads `$ARGUMENTS` as the feature request, or as the path to a `/forge-diagnose`
 `main` — you own releases. Pass **`--no-commit`** to run the full pipeline + gates with zero git
 writes (you review the working tree and commit yourself).
 
-**`codex` subcommand** — `/forge-orchestrate codex <feature>` keeps decomposition, audit and review
-on Claude and hands implementation to the Codex CLI. It adds one phase the Claude path does not have:
-Codex audits the decomposition read-only **before** any code is written (1b), because a plan flaw is
-cheapest to fix while it is still a plan. Everything else is identical, `--no-commit` still composes,
-and the main session still owns every git write.
+**`codex` subcommand** — `/forge-orchestrate codex <feature>` plans through a two-agent **planning
+council** and hands implementation to the Codex CLI. Codex proposes its own decomposition from the
+original task without seeing Claude's, Claude synthesizes both, Codex critiques the synthesis, and
+Claude decides — at most 3 read-only Codex calls, before a line of code is written, because a plan
+flaw is cheapest to fix while it is still a plan. Claude stays coordinator, synthesizer, reviewer and
+final decision-maker. Everything else is identical, `--no-commit` still composes, and the main
+session still owns every git write.
 
 **Roles (mapped from the multi-agent blueprint):** Coordinator = intent-parse + decompose · Engineer
 = worker subagent that edits code + writes tests · QA/Critic = the CI gate runner + review loop ·
 Synthesis = final report + release-readiness.
 
 **Global state object** — track these across phases and surface them in the final report:
-`branch`, `subtasks[]` (goal, criterion, deps, independent, gate_set, status, agent_id, commit_sha),
-`gate_results`, `files_changed`, `commits[]`, `all_gates_pass`.
+`branch`, `subtasks[]` (goal, criterion, deps, independent, gate_set, status, agent_id, commit_sha,
+`slice` = the key words its graph slice was produced from, so a stale slice is visible after a
+revision), `gate_results`, `files_changed`, `commits[]`, `all_gates_pass`.
+
+Under `[BACKEND] = codex`, also `council`: `run_id`, `calls_used`, `proposal_ok`, `round2_verdict`,
+`round2_session_id`, `round3_verdict`, `unresolved[]`. `round2_session_id` is a council session and
+is kept apart from every subtask's `agent_id` — 5c must never resume one for the other.
 
 **Reference files** — read each only when its branch applies, not up front:
 
 | File | Read when |
 |---|---|
 | `references/graph-slice.md` | Phase 3a — always (the slice script lives there) |
-| `references/codex-backend.md` | `[BACKEND] = codex` — read right after 0d, before Phase 1 |
+| `references/codex-backend.md` | `[BACKEND] = codex` — read right after 0d, before the council |
 | `references/task-list-formats.md` | `doc/task-list.md` exists (Phase 0d + Phase 6) |
 | `references/worktree-mode.md` | a batch has 2+ independent subtasks AND `[NO_COMMIT]` is false |
 | `references/release-readiness.md` | Phase 6 |
@@ -132,10 +139,10 @@ First, parse the **backend subcommand**: if `$ARGUMENTS` starts with the bare wo
 flag — same shape as `/forge-contextmap sync` — and it must be parsed first so that both
 `/forge-orchestrate codex --no-commit <feature>` and `/forge-orchestrate codex doc/diagnosis-x.md`
 resolve correctly. Under `[BACKEND] = codex`, read `references/codex-backend.md` now and run its C1
-preflight before Phase 1; a preflight failure stops the run before anything is written.
+preflight before the council; a preflight failure stops the run before anything is written.
 
-Announce the parse in one line — `Backend: codex — Claude plans and audits, Codex implements.` — and
-continue without blocking. A feature request whose own first word is "codex" would otherwise be
+Announce the parse in one line — `Backend: codex — Claude and Codex plan as a council, Codex
+implements.` — and continue without blocking. A feature request whose own first word is "codex" would otherwise be
 silently mis-split, and this line makes that visible in time to correct it.
 
 Next, parse flags: if what remains contains **`--no-commit`**, set `[NO_COMMIT] = true`
@@ -198,6 +205,14 @@ Slugify `[TASK]` into `feature/<slug>` (e.g. "create a feature where the login b
 
 ## PHASE 1: Decompose / Micro-plan *(Coordinator = PM agent)*
 
+**Under `[BACKEND] = codex`, do not start here — go to 1b and run the council first.** The rules in
+1a below are still the ones you decompose by; they run as council step 1b.2, *after* Codex has
+returned its own independent proposal. Starting here would produce a Claude decomposition before
+Codex has been asked, and the council's whole value is that Codex answers the original task without
+having seen one.
+
+### 1a. Decomposition rules
+
 Break `[TASK]` into an ordered list of subtasks. For each subtask record:
 
 - **goal** — one line
@@ -218,7 +233,8 @@ follow-up one, not scattered.
 Initialize the global state object with these subtasks.
 
 Print the decomposition for transparency, then **proceed immediately — no approval stop**
-(clarify-then-run):
+(clarify-then-run). Under `[BACKEND] = codex` this print happens at 1b.3, once the synthesis exists;
+the last line becomes the council's:
 
 ```
 Plan for [TASK] (branch [BRANCH]):
@@ -229,21 +245,48 @@ Subtask 2: [goal]
   success: [criterion]   depends on: 1      independent: no    gates: lint,test
 ...
 
-Running now. I'll stop only if a request is ambiguous or a gate fails 3×.
+Running now. I'll stop only if a request is ambiguous, the planning council ends unresolved, or a
+gate fails 3×.
 ```
 
-### 1b. Spec audit *(codex backend only — skip entirely when `[BACKEND] = claude`)*
+### 1b. Planning council *(codex backend only — skip entirely when `[BACKEND] = claude`)*
 
-Before any code is written, Codex audits the decomposition read-only. Follow
-`references/codex-backend.md` §C3 — it carries the schema, the invocation and the payload.
+Before any code is written, Claude and Codex plan as a council. Follow
+`references/codex-backend.md` §C3 — it carries both schemas, the invocation shapes, the payloads and
+the budget rules. **At most 3 Codex calls, all read-only.** Every dispatch is background (§C2); a
+planning call can exceed a 10-minute foreground cap, and a killed call still spends its slot.
 
-- `verified` → Phase 2.
-- `flawed` → rewrite **only the subtasks the findings name**, leave the rest byte-identical, re-audit.
-- **At most 3 rounds.** After the 3rd `flawed`, stop, print every round's verdict plus the full
-  findings, and hand back. There is no 4th audit.
-- If the audit's `execution_order` contradicts the `depends on` fields above, reconcile it **here, in
-  the decomposition** — never let Phase 4 silently pick one. Phase 4 follows the reconciled
-  dependencies; the final round's `execution_order` only breaks ties the dependencies leave open.
+1. **1b.0 — set up.** Pick the `run_id`. Purge other runs' council scratch (C3: `-s read-only`
+   restricts writes, not reads — a stale payload holds an earlier plan). Write both schemas. Produce
+   a **task-level** graph slice: read `references/graph-slice.md` and run its script with `[TASK]`'s
+   key words.
+2. **1b.1 — call 1, Codex's independent proposal.** Dispatch before writing any decomposition of your
+   own. The payload carries the task, its criteria, `[TASK_FEATURE]`, the diagnosis facts
+   (`[BLAST_RADIUS]`, `[RULED_OUT]`), any assumption 0e resolved, and the graph/doc/`CLAUDE.md`
+   *paths* — never a Claude decomposition, which does not exist yet. Validate the result
+   semantically, not just against the schema.
+3. **1b.2 — your candidate.** Now apply 1a's rules and produce your own decomposition. Read Codex's
+   proposal as evidence; never adopt it wholesale and never discard it unread.
+4. **1b.3 — synthesize and print.** Reconcile the two against live repository evidence, record every
+   material disagreement and why you chose as you did, then print the plan block above.
+5. **1b.4 — per-subtask slices** for the synthesized subtasks (`references/graph-slice.md` again).
+   These are **advisory planning inputs**: Phase 3a re-runs them after the branch exists.
+6. **1b.5 — call 2, critique.** Fresh session. `verified` → stop early at 2 calls, go to Phase 2.
+   `flawed` → 1b.6.
+7. **1b.6 — revise and verify.** Rewrite **only the subtasks the findings name**, leave the rest
+   byte-identical, and **re-slice every subtask you revised** — Phase 3b routes docs off the slice's
+   `FILES`, so a stale one mis-routes them. Then call 3, resuming call 2's session.
+8. **1b.7 — finalize.** Incorporate or reject each outstanding objection **with the repository
+   evidence that justifies it**, and reconcile `execution_order` against the `depends on` fields —
+   here, in the decomposition, never as a silent override at dispatch time. Phase 4 follows the
+   reconciled dependencies; the final round's `execution_order` only breaks ties they leave open.
+
+**Then the approval policy:**
+
+- **Everything resolved** → continue to Phase 2 hands-off. No stop. The normal path.
+- **Anything unresolved** — a final `flawed`, or a degraded round 2 or 3 — → print the final plan,
+  Codex's unresolved objection and the concrete risk it names, then **ask before executing**. Never
+  describe this as consensus. This is a pause, not an abort: 6z keeps the council artifacts.
 
 ---
 
@@ -258,6 +301,14 @@ edit the current tree in place and the user commits later.
    ```
    If the tree is dirty, ASK before proceeding — stash (`git stash push -u`) or abort. Do not
    silently discard or commit the user's pending work.
+
+   **Under `[BACKEND] = codex`, ignore this run's own scratch here.** The council (1b) writes
+   payloads, schemas and results into `graphify-out/` before this check runs, and that directory is
+   not guaranteed to be gitignored — so on a repo that tracks it, an untouched tree looks dirty and
+   you would ask the user to stash your own files. Match on the **path prefix**, not exact names:
+   `git status --porcelain` can collapse the whole untracked directory into one `?? graphify-out/`
+   line. If the user chooses to stash, exclude the run's scratch from it (or regenerate it after) —
+   `git stash push -u` would otherwise take the council state with it.
 
 2. **Resolve the base branch as `[BASE]`** — before the branch is created, because it is the branch's
    start point:
@@ -375,6 +426,13 @@ Read `references/graph-slice.md` and follow it exactly. It writes the slice scri
 subtask with the subtask's key terms, and returns the touched source files + node labels + key
 edges. `NO_MATCH` means the graph has no node for these terms — fall back to the universal docs only
 (3b) and tell the worker the graph had no specific match.
+
+**This phase is authoritative even when 1b already sliced.** The council's slices were computed
+before Phase 2 chose a branch, and Phase 2 can check out an existing feature branch carrying prior
+commits or branch from `[BASE]` rather than HEAD — after which worktrees inherit that branch. A
+pre-branch slice can therefore describe a tree nobody is editing, and 3b derives the doc set straight
+from `FILES`, so a stale slice mis-routes docs silently. Re-run the slice here for every subtask and
+overwrite the advisory result.
 
 ### 3b. Doc slice
 
@@ -645,9 +703,11 @@ including every file it read and every edit it made, so you send only the error 
 payload. Spawn a fresh `Agent` **only** if that agent is gone; that path re-sends the whole payload
 and the worker has to re-read everything it already read.
 
-Under `[BACKEND] = codex`, "resume" means `codex exec resume <session id>` — see
-`references/codex-backend.md` §C6, which also carries the fallback for a session that cannot be
-resumed. It is never `SendMessage`.
+Under `[BACKEND] = codex`, "resume" means `codex exec` with the session id — see
+`references/codex-backend.md` §C6 for the exact argument order (`-s` and `-C` go **before** the
+`resume` subcommand, which rejects them) and the fallback for a session that cannot be resumed. It is
+never `SendMessage`. Resume the subtask's `agent_id`, never `council.round2_session_id` — that one is
+a read-only planning session.
 
 **Bounded loop: at most 3 iterations per subtask.** If still failing after 3, stop the loop and
 report it to the user — do not loop further.
@@ -735,16 +795,43 @@ When all subtasks are complete:
    If `[BACKEND] = codex`, add two lines above `Files changed:`:
    ```
    Backend:     codex
-   Audit:       [N] round(s) — verified on round [N]
+   Council:     [N] call(s) — [verified on call N | degraded, [round] unusable | unresolved]
    ```
-   plus, for any subtask where Codex's `FILES CHANGED:` list disagreed with the git delta (§C5),
+   When anything went unresolved, follow it with the objection and its risk, in Codex's terms, not
+   softened:
+   ```
+   Unresolved:  [subtask] — [Codex's objection] (risk: [what it says breaks])
+   ```
+   Never write "verified" for a round that failed to answer, and never describe a run that ended
+   unresolved as agreed.
+
+   Add, for any subtask where Codex's `FILES CHANGED:` list disagreed with the git delta (§C5),
    an `unclaimed changes:` line naming those paths. Never suppress it — it is either build output
    the user should gitignore, or scope creep.
-7. Clean up:
-   - Remove `graphify-out/.orchestrate_slice.py`, and every other `graphify-out/.orchestrate_*`
-     scratch file the run created (payloads, snapshots, audit schema and audit rounds under
-     `[BACKEND] = codex`).
-   - **Worktree mode:** follow the cleanup section of `references/worktree-mode.md`.
+7. Clean up — follow **6z** below.
+
+### 6z. Scratch cleanup — reachable from every exit, not only from a finished run
+
+Phase 6 used to be the only place this happened, so every early exit leaked scratch. Call this step
+from **all** of them: the C1 preflight failure, a model-unavailable stop, the council's unresolved
+approval stop, a dirty-tree abort, the no-test-runner abort, a secrets hard block, a gate that failed
+3×, and the normal end of Phase 6.
+
+**What to delete:** `graphify-out/.orchestrate_slice.py`, plus every `graphify-out/.orchestrate_*`
+scratch file **this run** created — payloads, snapshots, and under `[BACKEND] = codex` the council
+schemas and round results, matched by this run's `run_id`. Never delete by a bare `.orchestrate_*`
+glob: a second `/forge-orchestrate` may be running in another session and owns its own files.
+
+**Two exits behave differently:**
+
+- **The council's approval stop is a pause, not an abort — keep everything.** The user is expected to
+  answer and continue, and the payloads, slices and round results are the state that continuation
+  needs. Deleting them there turns a question into a restart.
+- **A C1 preflight failure needs no cleanup at all** — it fires before the run has written anything.
+
+**Worktree mode:** follow the cleanup section of `references/worktree-mode.md`. Note it does not
+cover the exits above: a gate or secrets failure after Phase 4 leaves a worktree holding uncommitted
+work, and that must be **reported and left in place**, never silently removed.
 
 ---
 
