@@ -35,13 +35,33 @@ cleanup: it fires before the run has created a single artifact.
 
        project_doc_fallback_filenames = ["CLAUDE.md"]
    ```
-3. **`AGENTS.md` shadow check.** The key is a *fallback*: when a project has both files, `AGENTS.md`
-   wins and `CLAUDE.md` is never read. If the repo root has an `AGENTS.md`, stop:
+3. **`AGENTS.md` shadow check — compare the two files, do not merely look for one.** The key is a
+   *fallback*, and resolution is **first-match-wins**: with both files present only `AGENTS.md`
+   reaches the model, and with `AGENTS.md` absent `CLAUDE.md` does. Verified against 0.146.0 with
+   `codex debug prompt-input`, which renders the model-visible prompt as JSON without a model call —
+   use it if you ever need to re-check this.
+
+   No `AGENTS.md` in the repo root → nothing to do. If there is one, diff it:
+
+   ```bash
+   git diff --no-index --ignore-all-space -- CLAUDE.md AGENTS.md
    ```
-   This repo has both AGENTS.md and CLAUDE.md. Codex reads AGENTS.md and ignores CLAUDE.md, so
-   the ContextForge rules would not reach it. Merge CLAUDE.md's rules into AGENTS.md, or remove
-   AGENTS.md, then re-run.
+
+   Empty → the shadowing is harmless; continue silently. Non-empty → print the drifted section
+   headings and **continue**:
+
    ```
+   Note: AGENTS.md shadows CLAUDE.md for Codex, and the two have drifted — Codex auto-loads only
+   AGENTS.md. Drifted sections: [headings]. Every dispatch below names CLAUDE.md explicitly (C4),
+   so its rules still reach Codex; but where the two disagree, AGENTS.md is the one Codex reads
+   first. Reconcile them if that matters for this task.
+   ```
+
+   This is a warning rather than a stop because C4 delivers `CLAUDE.md`'s *content* by naming its
+   path in every payload. What C4 cannot do is evict `AGENTS.md` from the auto-loaded context — so
+   the diff is the only signal that two rule sets are in play, which is exactly why the check tests
+   divergence and not existence. An existence check fires on identical files, gets overridden once,
+   and is dead from then on.
 4. **Graph reachability.** If `graphify-out/` or `doc/` sit outside the directory Codex will run in,
    every invocation below needs `--add-dir <path>`. Normally they are both in the repo root and
    nothing is needed.
@@ -448,12 +468,29 @@ Add `-C <worktree abs path>` in worktree mode, `--add-dir <path>` per C1.4. Run 
 C2.
 
 **The payload is the Phase 3c payload, verbatim, with nothing removed** — that reuse is the point of
-this design. Append only these two lines:
+this design. Wrap it: one line before, two after.
+
+Prepend:
+
+```
+Read ./CLAUDE.md before you start. It is this project's binding engineering rules and applies to
+this subtask even if AGENTS.md is also present.
+```
+
+Append:
 
 ```
 Do NOT git commit, do NOT create branches, do NOT run git add. The orchestrating session owns git.
 List every file you created or modified, one path per line, under a final "FILES CHANGED:" heading.
 ```
+
+The prepended line goes first for the reason 3c gives about its own read gate — a worker that skims
+still hits it. It exists because C1.2's config key is not a guarantee: it is a *fallback*, so an
+`AGENTS.md` in the repo root shadows `CLAUDE.md` entirely (C1.3), and the key itself lives in a file
+this skill must not edit. Naming the path in the payload is the one delivery path that does not
+depend on the operator's `~/.codex/config.toml`. It is Codex-only: Claude workers auto-load the
+project's `CLAUDE.md`, which is why 3c omits it, and keeping the line here leaves the 3c payload
+byte-identical across both backends.
 
 The commit ban is already in 3c, but Codex has its own git tooling and a second explicit statement is
 cheap insurance. The file list is neither trusted nor discarded — it is one of two inputs to C5.
