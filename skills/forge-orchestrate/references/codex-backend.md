@@ -275,8 +275,19 @@ but did not report is either build output (harmless, and the user can gitignore 
 5c's rule is *resume, not respawn*. The Codex equivalent of `SendMessage` is:
 
 ```bash
-codex exec resume <session id> -m <same model as the original dispatch> -s workspace-write \
-  -C <same dir as the original dispatch> - < graphify-out/.orchestrate_retry_<n>.txt
+codex exec -s workspace-write -C <same dir as the original dispatch> \
+  resume <session id> -m <same model as the original dispatch> \
+  - < graphify-out/.orchestrate_retry_<n>.txt
+```
+
+**`-s` and `-C` go BEFORE `resume`, not after it.** They are options of `codex exec`, and the
+`resume` subcommand does not accept them — it takes `-m`, `-c`, `--output-schema` and `-o`, but has
+no sandbox and no working-directory flag of its own. Putting them after the subcommand is not a
+degraded run, it is a dead one, before any model call:
+
+```
+error: unexpected argument '-s' found
+Usage: codex exec resume [OPTIONS] [SESSION_ID] [PROMPT]
 ```
 
 `-C` must match the original dispatch — in worktree mode a resume without it edits the wrong tree.
@@ -301,6 +312,7 @@ entirely.
 | Symptom | Cause | Response |
 |---|---|---|
 | Exit 1 with a 400 `invalid_request_error` naming the model | the account cannot use that `-m` id | report and stop — retrying cannot fix it (C2) |
+| `error: unexpected argument '-s' found` on a retry | `-s`/`-C` placed after `resume` | move them before the subcommand (C6) |
 | Codex reports a file it could not write | path outside the writable root | add `--add-dir <path>` and retry that subtask |
 | Empty or unparseable `-o` file after an audit | run died before its final turn | treat as a failed round; it still counts against the 3 |
 | `git status` delta is empty after execute | **check the snapshot cwd first** (C5) — in worktree mode a bare `git status` reads the main checkout and always comes back empty. Otherwise Codex answered without editing, or was killed mid-run | fix the `-C`; if the cwd was right, re-dispatch with the goal restated |
