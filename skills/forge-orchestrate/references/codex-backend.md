@@ -256,10 +256,17 @@ same `id`, a `depends_on` naming an id that does not exist, a dependency cycle, 
 of them is **degraded**, not flawed — it spent its call and round 1 is treated as absent (below).
 
 **The prose fields carry the operator's own Codex instructions.** A `goal` or `problem` string comes
-back wearing whatever house style `~/.codex/` imposes — greetings, confidence tags, the lot. Observed
-in fixture runs. It is cosmetic and it is the operator's own configuration, so do not try to strip
-it: read these fields for their content and write the plan in your own words, which 1b.2 already
-requires. Never paste a proposal string straight into the printed decomposition.
+back wearing whatever house style the operator's **global `~/.codex/AGENTS.md`** imposes — greetings,
+confidence tags, the lot. Observed in fixture runs, including one whose entire prompt was "Reply with
+the single word ok" and which still opened with the operator's greeting rule. That global file is the
+carrier, not `project_doc_fallback_filenames`: the key routes the *project's* `CLAUDE.md`, while the
+style arrives from `~/.codex/AGENTS.md`, which on this machine is a verbatim copy of the operator's
+global `~/.claude/CLAUDE.md`. Naming the wrong cause sends an operator to edit the wrong file.
+
+The payloads ask for plain text (below), which handles the common case. Whatever still arrives styled
+is cosmetic and is the operator's own configuration, so do not try to strip it: read these fields for
+their content and write the plan in your own words, which 1b.2 already requires. Never paste a
+proposal string straight into the printed decomposition.
 
 **Rounds 2–3 — the critique.** `..._critique_schema.json`, unchanged from the audit it replaces:
 
@@ -370,6 +377,8 @@ Include, paths not pasted text:
   Do not read anything under graphify-out/.orchestrate_council_*/ — those are another run's
   planning notes, and reading them would defeat the point of asking you independently.
   Do not run the test suite. Do not write code. Do not edit files.
+  Every JSON string field must be plain descriptive text — no greetings, sign-offs or
+  confidence tags.
   ```
   Note which carve-outs are absent. "Never flag paths a subtask CREATES" and "missing lint tooling
   is not a finding" belong to the critique rounds — round 1 is not auditing anything, and pasting
@@ -378,8 +387,13 @@ Include, paths not pasted text:
 ### Rounds 2–3 payload — the critique
 
 Round 2 gets the synthesis: every subtask's goal, success criterion, deps and gate set, plus the
-per-subtask slice `FILES` from 1b.4, `[TASK]` and `[TASK_CRITERIA]`. Round 3, resuming, gets **only
-the revised subtasks and the instruction below** — the session already holds everything else.
+per-subtask slice `FILES` from 1b.4, `[TASK]`, `[TASK_CRITERIA]`, and **the project `CLAUDE.md`
+path** — the same path round 1 carries. Without it the critique cannot do the thing this section
+cites as its reason for running on `sol` ("cross-checked the plan against the project `CLAUDE.md`'s
+two-decimal rounding rule"): a subtask that violates a project rule is only visible to a round that
+was told where the rules live. C1.3's shadow warning applies here too — if an `AGENTS.md` shadows it,
+naming the path is what still gets it read. Round 3, resuming, gets **only the revised subtasks and
+the instruction below** — the session already holds everything else.
 
 - These questions, verbatim:
   ```
@@ -397,6 +411,8 @@ the revised subtasks and the instruction below** — the session already holds e
   must run.
   Report defects only. Do not report stylistic preferences.
   Do not run the test suite. Do not write code. Do not edit files.
+  Every JSON string field must be plain descriptive text — no greetings, sign-offs or
+  confidence tags.
   ```
   All three carve-outs are load-bearing and were added after fixture runs. Without the first, the
   audit reports every new file the plan creates as a missing path and drowns the real findings.
