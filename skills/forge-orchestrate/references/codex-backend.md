@@ -228,6 +228,12 @@ same `id`, a `depends_on` naming an id that does not exist, a dependency cycle, 
 `execution_order` unrelated to the subtasks. Check all five after parsing. A proposal that fails any
 of them is **degraded**, not flawed — it spent its call and round 1 is treated as absent (below).
 
+**The prose fields carry the operator's own Codex instructions.** A `goal` or `problem` string comes
+back wearing whatever house style `~/.codex/` imposes — greetings, confidence tags, the lot. Observed
+in fixture runs. It is cosmetic and it is the operator's own configuration, so do not try to strip
+it: read these fields for their content and write the plan in your own words, which 1b.2 already
+requires. Never paste a proposal string straight into the printed decomposition.
+
 **Rounds 2–3 — the critique.** `..._critique_schema.json`, unchanged from the audit it replaces:
 
 ```json
