@@ -139,7 +139,8 @@ First, parse the **backend subcommand**: if `$ARGUMENTS` starts with the bare wo
 flag — same shape as `/forge-contextmap sync` — and it must be parsed first so that both
 `/forge-orchestrate codex --no-commit <feature>` and `/forge-orchestrate codex doc/diagnosis-x.md`
 resolve correctly. Under `[BACKEND] = codex`, read `references/codex-backend.md` now and run its C1
-preflight before the council; a preflight failure stops the run before anything is written.
+preflight before the council; a missing `codex` binary stops the run before anything is written, and
+its other checks warn and continue.
 
 Announce the parse in one line — `Backend: codex — Claude and Codex plan as a council, Codex
 implements.` — and continue without blocking. A feature request whose own first word is "codex" would otherwise be
@@ -575,6 +576,14 @@ check PATH before recording a skip. Then **run what exists, skip + honestly repo
 Never print a passing check for a gate you didn't actually run. Run in this order and record each
 result as `pass` / `fail` / `skipped (reason)`:
 
+**A worker's, a reviewer's or Codex's statement about test results is a review input, never a gate
+result.** The only counts that may reach a commit message, `doc/progress.txt`, `doc/changelog.txt` or
+the Phase 6 report are the ones printed by the command *this session* ran here. If a reviewer reports
+failures you have not seen, run the test command yourself before recording anything — and if your run
+does not reproduce them, that is **not** a gate failure: it does not enter 5c and does not spend one
+of the three iterations. Record what you observed and report the discrepancy. The codex backend makes
+this easy to get wrong: more agents report results, so there is more to relay.
+
 1. **Lint / style** — e.g. `eslint`, `ruff check`, `flake8`, `dotnet format --verify-no-changes`,
    `go vet`. (checklist: "linting and code style enforcement")
 2. **Tests** — e.g. `npm test`, `pytest`, `go test ./...`, `dotnet test`. MUST pass before commit.
@@ -760,6 +769,8 @@ When all subtasks are complete:
    `/forge-orchestrate` does **not** tag — releases/tags stay a manual step you run when you want one.
 2. Update `doc/progress.txt` with the current status.
 3. Append to `doc/changelog.txt` (`Date | Change | Description`, matching contextmap's format).
+   Steps 2–3 write test results into files, so 5a's rule binds here: the counts you write are the
+   ones 5a's own command printed, never a worker's or a reviewer's report of them.
 4. If `doc/task-list.md` exists → read `references/task-list-formats.md` and follow its *Phase 6*
    section to tick what the gates actually verified. Skip silently if the file does not exist.
 5. **Generate the CD release-readiness report** — read `references/release-readiness.md` and write
@@ -813,7 +824,7 @@ When all subtasks are complete:
 ### 6z. Scratch cleanup — reachable from every exit, not only from a finished run
 
 Phase 6 used to be the only place this happened, so every early exit leaked scratch. Call this step
-from **all** of them: the C1 preflight failure, a model-unavailable stop, the council's unresolved
+from **all** of them: the C1.1 no-`codex`-binary stop, a model-unavailable stop, the council's unresolved
 approval stop, a dirty-tree abort, the no-test-runner abort, a secrets hard block, a gate that failed
 3×, and the normal end of Phase 6.
 
@@ -828,7 +839,7 @@ session and owns its own files.
 - **The council's approval stop is a pause, not an abort — keep everything.** The user is expected to
   answer and continue, and the payloads, slices and round results are the state that continuation
   needs. Deleting them there turns a question into a restart.
-- **A C1 preflight failure needs no cleanup at all** — it fires before the run has written anything.
+- **A C1.1 preflight stop needs no cleanup at all** — it fires before the run has written anything.
 
 **Worktree mode:** follow the cleanup section of `references/worktree-mode.md`. Note it does not
 cover the exits above: a gate or secrets failure after Phase 4 leaves a worktree holding uncommitted

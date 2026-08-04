@@ -15,33 +15,62 @@ Behaviour below was verified against `codex-cli 0.146.0`.
 
 ---
 
-## C1. Preflight — run before the council, stop on failure
+## C1. Preflight — run before the council
 
-Never edit `~/.codex/config.toml` yourself. Print the fix and stop. A preflight failure needs no
-cleanup: it fires before the run has created a single artifact.
+Only C1.1 stops the run: with no `codex` binary there is no backend. The rest print and continue,
+because C4 names `CLAUDE.md` in every payload and their failure modes degrade the run rather than
+break it. **Never edit `~/.codex/config.toml` yourself** — print the fix and let the operator decide.
+A C1.1 stop needs no cleanup: it fires before the run has created a single artifact.
 
 1. **`codex` on PATH** — `codex --version`. Missing → stop:
    ```
    /forge-orchestrate codex needs the Codex CLI. Install it, then re-run.
    ```
-2. **Codex must read this project's `CLAUDE.md`.** Codex reads `AGENTS.md`, not `CLAUDE.md`, and the
-   3c payload deliberately omits the engineering-discipline rules because a Claude subagent
-   auto-loads the project's `CLAUDE.md`. Codex only picks it up through a config key. Check for
-   `project_doc_fallback_filenames` in `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`).
-   Missing → stop with this exact remediation:
+2. **Codex must read this project's `CLAUDE.md`.** Codex auto-loads the repo's `AGENTS.md`, not its
+   `CLAUDE.md`, and the 3c payload deliberately omits the engineering-discipline rules because a
+   Claude subagent
+   auto-loads the project's `CLAUDE.md` for free. Two things get it to Codex, and they are not
+   equivalent: the config key below makes it **auto-load** (in a repo with no `AGENTS.md`), while
+   C4's prepended line makes every dispatch **read it on instruction**. C4 always fires, so this is
+   a warning, not a stop. Check for `project_doc_fallback_filenames` in `~/.codex/config.toml` (or
+   `$CODEX_HOME/config.toml`). Missing → print and continue:
    ```
-   Codex will not read this project's CLAUDE.md — its engineering rules would be silently
-   dropped from every dispatch. Add this line to ~/.codex/config.toml, then re-run:
+   Note: ~/.codex/config.toml has no project_doc_fallback_filenames, so Codex will not auto-load
+   this project's CLAUDE.md. Every dispatch names the file explicitly, so its rules still reach
+   Codex — but auto-loading is the stronger guarantee. To get it, add this line and re-run:
 
        project_doc_fallback_filenames = ["CLAUDE.md"]
    ```
-3. **`AGENTS.md` shadow check.** The key is a *fallback*: when a project has both files, `AGENTS.md`
-   wins and `CLAUDE.md` is never read. If the repo root has an `AGENTS.md`, stop:
+3. **`AGENTS.md` shadow check — compare the two files, do not merely look for one.** The key is a
+   *fallback*, and resolution is **first-match-wins within a directory**: with both files in the repo
+   root only `AGENTS.md` reaches the model, and with `AGENTS.md` absent `CLAUDE.md` does. The
+   operator's global `~/.codex/AGENTS.md` is a separate layer and loads either way — this check is
+   about the repo's files, not that one. Verified against 0.146.0 with `codex debug prompt-input`,
+   which renders the model-visible prompt as JSON without a model call — use it to re-check any of
+   this.
+
+   No `AGENTS.md` in the repo root → nothing to do. If there is one, diff it:
+
+   ```bash
+   git diff --no-index --ignore-all-space -- CLAUDE.md AGENTS.md
    ```
-   This repo has both AGENTS.md and CLAUDE.md. Codex reads AGENTS.md and ignores CLAUDE.md, so
-   the ContextForge rules would not reach it. Merge CLAUDE.md's rules into AGENTS.md, or remove
-   AGENTS.md, then re-run.
+
+   Empty → the shadowing is harmless; continue silently. Non-empty → print the drifted section
+   headings and **continue**:
+
    ```
+   Note: this repo's AGENTS.md shadows its CLAUDE.md for Codex, and the two have drifted — of the
+   pair, only AGENTS.md auto-loads. Drifted sections: [headings]. Every dispatch names CLAUDE.md
+   explicitly (C4),
+   so its rules still reach Codex; but where the two disagree, AGENTS.md is the one Codex reads
+   first. Reconcile them if that matters for this task.
+   ```
+
+   This is a warning rather than a stop because C4 delivers `CLAUDE.md`'s *content* by naming its
+   path in every payload. What C4 cannot do is evict `AGENTS.md` from the auto-loaded context — so
+   the diff is the only signal that two rule sets are in play, which is exactly why the check tests
+   divergence and not existence. An existence check fires on identical files, gets overridden once,
+   and is dead from then on.
 4. **Graph reachability.** If `graphify-out/` or `doc/` sit outside the directory Codex will run in,
    every invocation below needs `--add-dir <path>`. Normally they are both in the repo root and
    nothing is needed.
@@ -92,6 +121,13 @@ this is easy to miss.
 An execute dispatch stores the id in the subtask's existing `agent_id` slot for C6; council round 2
 stores it in `council.round2_session_id` for round 3. Keep the two apart — they are different
 sessions with different sandboxes.
+
+**Never detect completion by grepping the log for text that appears in the payload.** `codex exec`
+echoes the whole prompt to stdout before the turn starts, so a `FILES CHANGED` grep matches the
+instruction that *asked* for the list, not the answer, and reports a finished run seconds after
+dispatch. Any sentinel drawn from the payload self-matches this way. Wait on the background
+dispatch's own exit; if you must poll the log, match the run trailer `^tokens used`, which only the
+finished turn writes. For a council round the `-o` file appearing is the same signal.
 
 **Worktree mode** — pass `-C <worktree abs path>` so Codex's working root is that checkout.
 
@@ -229,10 +265,18 @@ same `id`, a `depends_on` naming an id that does not exist, a dependency cycle, 
 of them is **degraded**, not flawed — it spent its call and round 1 is treated as absent (below).
 
 **The prose fields carry the operator's own Codex instructions.** A `goal` or `problem` string comes
-back wearing whatever house style `~/.codex/` imposes — greetings, confidence tags, the lot. Observed
-in fixture runs. It is cosmetic and it is the operator's own configuration, so do not try to strip
-it: read these fields for their content and write the plan in your own words, which 1b.2 already
-requires. Never paste a proposal string straight into the printed decomposition.
+back wearing whatever house style the operator's **global `~/.codex/AGENTS.md`** imposes — greetings,
+confidence tags, the lot. Observed in fixture runs, including one whose entire prompt was "Reply with
+the single word ok" and which still opened with the operator's greeting rule. That global file is the
+carrier, not `project_doc_fallback_filenames`: the key routes the *project's* `CLAUDE.md`, while the
+style arrives from `~/.codex/AGENTS.md` — which operators who keep one house style across both CLIs
+often maintain as a copy of their global `~/.claude/CLAUDE.md`. Naming the wrong cause sends an
+operator to edit the wrong file.
+
+The payloads ask for plain text (below), which handles the common case. Whatever still arrives styled
+is cosmetic and is the operator's own configuration, so do not try to strip it: read these fields for
+their content and write the plan in your own words, which 1b.2 already requires. Never paste a
+proposal string straight into the printed decomposition.
 
 **Rounds 2–3 — the critique.** `..._critique_schema.json`, unchanged from the audit it replaces:
 
@@ -343,6 +387,8 @@ Include, paths not pasted text:
   Do not read anything under graphify-out/.orchestrate_council_*/ — those are another run's
   planning notes, and reading them would defeat the point of asking you independently.
   Do not run the test suite. Do not write code. Do not edit files.
+  Every JSON string field must be plain descriptive text — no greetings, sign-offs or
+  confidence tags.
   ```
   Note which carve-outs are absent. "Never flag paths a subtask CREATES" and "missing lint tooling
   is not a finding" belong to the critique rounds — round 1 is not auditing anything, and pasting
@@ -351,8 +397,13 @@ Include, paths not pasted text:
 ### Rounds 2–3 payload — the critique
 
 Round 2 gets the synthesis: every subtask's goal, success criterion, deps and gate set, plus the
-per-subtask slice `FILES` from 1b.4, `[TASK]` and `[TASK_CRITERIA]`. Round 3, resuming, gets **only
-the revised subtasks and the instruction below** — the session already holds everything else.
+per-subtask slice `FILES` from 1b.4, `[TASK]`, `[TASK_CRITERIA]`, and **the project `CLAUDE.md`
+path** — the same path round 1 carries. Without it the critique cannot do the thing this section
+cites as its reason for running on `sol` ("cross-checked the plan against the project `CLAUDE.md`'s
+two-decimal rounding rule"): a subtask that violates a project rule is only visible to a round that
+was told where the rules live. C1.3's shadow warning applies here too — if an `AGENTS.md` shadows it,
+naming the path is what still gets it read. Round 3, resuming, gets **only the revised subtasks and
+the instruction below** — the session already holds everything else.
 
 - These questions, verbatim:
   ```
@@ -370,6 +421,8 @@ the revised subtasks and the instruction below** — the session already holds e
   must run.
   Report defects only. Do not report stylistic preferences.
   Do not run the test suite. Do not write code. Do not edit files.
+  Every JSON string field must be plain descriptive text — no greetings, sign-offs or
+  confidence tags.
   ```
   All three carve-outs are load-bearing and were added after fixture runs. Without the first, the
   audit reports every new file the plan creates as a missing path and drowns the real findings.
@@ -448,12 +501,29 @@ Add `-C <worktree abs path>` in worktree mode, `--add-dir <path>` per C1.4. Run 
 C2.
 
 **The payload is the Phase 3c payload, verbatim, with nothing removed** — that reuse is the point of
-this design. Append only these two lines:
+this design. Wrap it: one line before, two after.
+
+Prepend:
+
+```
+Read ./CLAUDE.md before you start. It is this project's binding engineering rules and applies to
+this subtask even if AGENTS.md is also present.
+```
+
+Append:
 
 ```
 Do NOT git commit, do NOT create branches, do NOT run git add. The orchestrating session owns git.
 List every file you created or modified, one path per line, under a final "FILES CHANGED:" heading.
 ```
+
+The prepended line goes first for the reason 3c gives about its own read gate — a worker that skims
+still hits it. It exists because C1.2's config key is not a guarantee: it is a *fallback*, so an
+`AGENTS.md` in the repo root shadows `CLAUDE.md` entirely (C1.3), and the key itself lives in a file
+this skill must not edit. Naming the path in the payload is the one delivery path that does not
+depend on the operator's `~/.codex/config.toml`. It is Codex-only: Claude workers auto-load the
+project's `CLAUDE.md`, which is why 3c omits it, and keeping the line here leaves the 3c payload
+byte-identical across both backends.
 
 The commit ban is already in 3c, but Codex has its own git tooling and a second explicit statement is
 cheap insurance. The file list is neither trusted nor discarded — it is one of two inputs to C5.
@@ -549,6 +619,7 @@ entirely.
 | Symptom | Cause | Response |
 |---|---|---|
 | Exit 1 with a 400 `invalid_request_error` naming the model | the account cannot use that `-m` id | report and stop — retrying cannot fix it (C2) |
+| A dispatch looks finished seconds after it started | the completion check grepped for a string the payload also contains, and matched the echoed prompt | wait on the dispatch's exit, or match `^tokens used` (C2) |
 | `error: unexpected argument '-s' found` on a retry | `-s`/`-C` placed after `resume` | move them before the subcommand (C6) |
 | Codex reports a file it could not write | path outside the writable root | add `--add-dir <path>` and retry that subtask |
 | Empty or unparseable `-o` file after a council round | run died before its final turn | it still counts against the 3 — degrade per C3, never score it `verified` |
