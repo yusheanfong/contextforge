@@ -26,8 +26,9 @@ A C1.1 stop needs no cleanup: it fires before the run has created a single artif
    ```
    /forge-orchestrate codex needs the Codex CLI. Install it, then re-run.
    ```
-2. **Codex must read this project's `CLAUDE.md`.** Codex auto-loads `AGENTS.md`, not `CLAUDE.md`,
-   and the 3c payload deliberately omits the engineering-discipline rules because a Claude subagent
+2. **Codex must read this project's `CLAUDE.md`.** Codex auto-loads the repo's `AGENTS.md`, not its
+   `CLAUDE.md`, and the 3c payload deliberately omits the engineering-discipline rules because a
+   Claude subagent
    auto-loads the project's `CLAUDE.md` for free. Two things get it to Codex, and they are not
    equivalent: the config key below makes it **auto-load** (in a repo with no `AGENTS.md`), while
    C4's prepended line makes every dispatch **read it on instruction**. C4 always fires, so this is
@@ -41,10 +42,12 @@ A C1.1 stop needs no cleanup: it fires before the run has created a single artif
        project_doc_fallback_filenames = ["CLAUDE.md"]
    ```
 3. **`AGENTS.md` shadow check — compare the two files, do not merely look for one.** The key is a
-   *fallback*, and resolution is **first-match-wins**: with both files present only `AGENTS.md`
-   reaches the model, and with `AGENTS.md` absent `CLAUDE.md` does. Verified against 0.146.0 with
-   `codex debug prompt-input`, which renders the model-visible prompt as JSON without a model call —
-   use it if you ever need to re-check this.
+   *fallback*, and resolution is **first-match-wins within a directory**: with both files in the repo
+   root only `AGENTS.md` reaches the model, and with `AGENTS.md` absent `CLAUDE.md` does. The
+   operator's global `~/.codex/AGENTS.md` is a separate layer and loads either way — this check is
+   about the repo's files, not that one. Verified against 0.146.0 with `codex debug prompt-input`,
+   which renders the model-visible prompt as JSON without a model call — use it to re-check any of
+   this.
 
    No `AGENTS.md` in the repo root → nothing to do. If there is one, diff it:
 
@@ -56,8 +59,9 @@ A C1.1 stop needs no cleanup: it fires before the run has created a single artif
    headings and **continue**:
 
    ```
-   Note: AGENTS.md shadows CLAUDE.md for Codex, and the two have drifted — Codex auto-loads only
-   AGENTS.md. Drifted sections: [headings]. Every dispatch below names CLAUDE.md explicitly (C4),
+   Note: this repo's AGENTS.md shadows its CLAUDE.md for Codex, and the two have drifted — of the
+   pair, only AGENTS.md auto-loads. Drifted sections: [headings]. Every dispatch names CLAUDE.md
+   explicitly (C4),
    so its rules still reach Codex; but where the two disagree, AGENTS.md is the one Codex reads
    first. Reconcile them if that matters for this task.
    ```
