@@ -66,8 +66,8 @@ codex exec [flags] - < graphify-out/.orchestrate_payload_<n>.txt
 A killed execute subprocess leaves a half-written working tree that C5 would then hand to `git add`
 — worse than a clean failure.
 
-Planning calls are not the short ones. A `sol`/`high` council-class call over this repo **blew
-through the 10-minute cap and was killed**; the identical call run detached finished normally. A
+Planning calls are not reliably the short ones. A `sol`/`high` council-class call over this repo
+**exceeded the 10-minute cap and was killed**; the identical call run detached finished normally. A
 killed planning call is a burnt budget slot (C3 counts it), so run every dispatch — execute *and*
 council — with `run_in_background: true` and read the result file when it lands. Do not give a
 planning call a foreground timeout; there is no timeout value that is both safe and under the cap.
@@ -76,10 +76,22 @@ planning call a foreground timeout; there is no timeout value that is both safe 
 council round 3. **Never `--dangerously-bypass-approvals-and-sandbox`** — `-s` is the whole safety
 story here.
 
-**Capture the session id.** `codex exec` prints `session id: <uuid>` on stdout before the turn
-starts. Grab it: an execute dispatch stores it in the subtask's existing `agent_id` slot for C6, and
-council round 2 stores it in `council.round2_session_id` for round 3. Keep the two apart — they are
-different sessions with different sandboxes.
+**Capture the session id — and note that background dispatch changes where you read it.** `codex
+exec` prints `session id: <uuid>` on stdout before the turn starts. Detached, that stdout does not
+come back to you, so **redirect it to a log file and read the id out of the log**:
+
+```bash
+codex exec [flags] - < <payload> > <log> 2>&1
+```
+
+Without this the id is never captured, and every path that depends on it silently degrades: C6 falls
+back to a fresh dispatch with the full payload, and council round 3 falls back to a fresh session
+that has forgotten its own findings. Both fallbacks work, so nothing errors — which is exactly why
+this is easy to miss.
+
+An execute dispatch stores the id in the subtask's existing `agent_id` slot for C6; council round 2
+stores it in `council.round2_session_id` for round 3. Keep the two apart — they are different
+sessions with different sandboxes.
 
 **Worktree mode** — pass `-C <worktree abs path>` so Codex's working root is that checkout.
 
@@ -152,23 +164,27 @@ is spent.
 
 ### Run identity and artifacts
 
-Pick a short `run_id` at 1b.0 (a timestamp is fine) and put it in every path this run writes:
+Pick a short `run_id` at 1b.0 (a timestamp is fine) and give this run **its own directory**:
 
-| Path | Written at | Holds |
+| Path (all under `graphify-out/.orchestrate_council_<run_id>/`) | Written at | Holds |
 |---|---|---|
-| `graphify-out/.orchestrate_council_<run_id>_proposal_schema.json` | 1b.0 | round 1's output schema |
-| `graphify-out/.orchestrate_council_<run_id>_critique_schema.json` | 1b.0 | rounds 2–3's output schema |
-| `graphify-out/.orchestrate_council_<run_id>_payload<N>.txt` | each round | that round's prompt |
-| `graphify-out/.orchestrate_council_<run_id>_round<N>.json` | each round | that round's `-o` result |
+| `proposal_schema.json` | 1b.0 | round 1's output schema |
+| `critique_schema.json` | 1b.0 | rounds 2–3's output schema |
+| `payload<N>.txt` | each round | that round's prompt |
+| `round<N>.json` | each round | that round's `-o` result |
+| `round<N>.log` | each round | the dispatch's stdout — this is where the session id is |
 
-The `run_id` is not decoration. Cleanup deletes **only this run's** files (SKILL.md 6z); a bare
-`.orchestrate_*` glob would delete a concurrently running orchestration's payloads out from under it.
+The directory is not decoration. Cleanup removes **only this run's** directory (SKILL.md 6z). Never
+delete by a bare `.orchestrate_*` glob and never "purge stale council scratch": a second
+`/forge-orchestrate` may be mid-council in another session, and without a lock you cannot tell its
+live payloads from a dead run's leftovers. Own your directory; leave every other one alone.
 
-**Purge stale council scratch before round 1.** `-s read-only` restricts writes, not reads — it is
-not a read allowlist, and Codex can open anything in the repo. A leftover
-`.orchestrate_council_*_payload2.txt` from an earlier run contains an earlier *Claude synthesis*, and
-round 1 reading it defeats the independence this whole section exists for. Delete other runs'
-council scratch first. This is the one leak the payload template cannot close.
+**Round 1 must not read another run's scratch.** `-s read-only` restricts writes, not reads — it is
+not a read allowlist, and Codex can open anything in the repo. A leftover `payload2.txt` from an
+earlier run holds an earlier *Claude synthesis*, and round 1 reading it defeats the independence this
+whole section exists for. Since deleting it is unsafe, the round 1 payload forbids reading it
+instead (see the instruction block below). That is an instruction, not an enforcement — the same
+class of guarantee as "do not edit files", and the honest limit of what this design can promise.
 
 ### The schemas
 
@@ -318,6 +334,8 @@ Include, paths not pasted text:
   Also return the risks and the assumptions you are making, and the order the subtasks must run.
   You are in a read-only sandbox and cannot run the test suite. That is expected — do not report
   it as a problem.
+  Do not read anything under graphify-out/.orchestrate_council_*/ — those are another run's
+  planning notes, and reading them would defeat the point of asking you independently.
   Do not run the test suite. Do not write code. Do not edit files.
   ```
   Note which carve-outs are absent. "Never flag paths a subtask CREATES" and "missing lint tooling

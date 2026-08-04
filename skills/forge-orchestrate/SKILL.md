@@ -256,10 +256,10 @@ Before any code is written, Claude and Codex plan as a council. Follow
 the budget rules. **At most 3 Codex calls, all read-only.** Every dispatch is background (§C2); a
 planning call can exceed a 10-minute foreground cap, and a killed call still spends its slot.
 
-1. **1b.0 — set up.** Pick the `run_id`. Purge other runs' council scratch (C3: `-s read-only`
-   restricts writes, not reads — a stale payload holds an earlier plan). Write both schemas. Produce
-   a **task-level** graph slice: read `references/graph-slice.md` and run its script with `[TASK]`'s
-   key words.
+1. **1b.0 — set up.** Pick the `run_id` and give this run its own directory,
+   `graphify-out/.orchestrate_council_<run_id>/` — never purge another run's, which may be live
+   (C3). Write both schemas there. Produce a **task-level** graph slice: read
+   `references/graph-slice.md` and run its script with `[TASK]`'s key words.
 2. **1b.1 — call 1, Codex's independent proposal.** Dispatch before writing any decomposition of your
    own. The payload carries the task, its criteria, `[TASK_FEATURE]`, the diagnosis facts
    (`[BLAST_RADIUS]`, `[RULED_OUT]`), any assumption 0e resolved, and the graph/doc/`CLAUDE.md`
@@ -818,9 +818,10 @@ approval stop, a dirty-tree abort, the no-test-runner abort, a secrets hard bloc
 3×, and the normal end of Phase 6.
 
 **What to delete:** `graphify-out/.orchestrate_slice.py`, plus every `graphify-out/.orchestrate_*`
-scratch file **this run** created — payloads, snapshots, and under `[BACKEND] = codex` the council
-schemas and round results, matched by this run's `run_id`. Never delete by a bare `.orchestrate_*`
-glob: a second `/forge-orchestrate` may be running in another session and owns its own files.
+scratch file **this run** created — payloads, snapshots, and under `[BACKEND] = codex` this run's
+whole `.orchestrate_council_<run_id>/` directory. Never delete by a bare `.orchestrate_*` glob and
+never touch another `run_id`'s directory: a second `/forge-orchestrate` may be running in another
+session and owns its own files.
 
 **Two exits behave differently:**
 
