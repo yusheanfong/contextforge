@@ -71,26 +71,37 @@ starts. Grab it and store it in the subtask's existing `agent_id` slot — C6 re
 
 **Worktree mode** — pass `-C <worktree abs path>` so Codex's working root is that checkout.
 
-**Always pass `-m` explicitly.** Without it every dispatch silently inherits whatever `model =` sits
-in the user's `~/.codex/config.toml`, which makes the audit's quality a function of an unrelated
-setting. This replaces the model-selection paragraph in Phase 4, which applies to Agent-tool workers
-only.
+**Always pass `-m` explicitly, and on planning calls `-c 'model_reasoning_effort="high"'` too.**
+Without them a dispatch silently inherits whatever `model =` and `model_reasoning_effort =` sit in
+the user's `~/.codex/config.toml`, which makes the council's quality a function of an unrelated
+setting. The two are one rule: an unset reasoning effort degrades a `sol` call as surely as the wrong
+`-m` does, and neither failure is visible in the output. This replaces the model-selection paragraph
+in Phase 4, which applies to Agent-tool workers only.
 
 | Phase | Model | Why |
 |---|---|---|
-| **C3 audit** | `gpt-5.6-sol` | The audit exists to catch what a cheap pass won't — "this subtask is architecturally wrong for this codebase", not just "this path does not exist". It is also the cheap phase: read-only, ~2 minutes, and one caught plan flaw saves a whole execute round. |
+| **C3 council** | `gpt-5.6-sol`, `model_reasoning_effort="high"` | Every planning call — the independent proposal and both critiques. Planning is where a cheap pass fails silently: it returns criterion-wording nits instead of "this subtask is architecturally wrong for this codebase". It is also the cheap phase — read-only, ~2 minutes a call, and one caught plan flaw saves a whole execute round. |
 | **C4 execute** | `gpt-5.6-terra` | Default. Mini-like tier, right for mechanical 1–2 file edits against a clear spec. |
 | **C4 execute** | `gpt-5.6-sol` | For a subtask involving multi-file integration or design judgment — the same distinction Phase 4 draws for Claude workers. |
+
+Execution keeps the explicit split above. `sol`/`high` is the planning tier, not a blanket default —
+do not reach for it on a bounded mechanical subtask.
 
 Tier descriptions are the CLI's own: `sol` is *"flagship … for hardest quality-first, coding, and
 reasoning workflows"*, `terra` is *"mini-like … for balanced cost, latency, and quality"*.
 
-The audit row is a measured result, not a preference. Same fixture, same schema, same prompt: `terra`
+The council row's model choice is a measured result, not a preference. Same fixture, same schema,
+same prompt, on the audit this council's critique round grew out of: `terra`
 returned criterion-wording nits, while `sol` caught that the plan's central term was undefined
 ("valid code" with no codes or rates specified), cross-checked the plan against the project
 `CLAUDE.md`'s two-decimal rounding rule, and read the source to find that `checkout()` returns a dict
 so "returns the discounted amount" names nothing real. Those are the findings that stop a wasted
 execute round; the nits are not. Both ran ~2 minutes.
+
+The `high` reasoning effort is a determinism requirement, not a measured one: it was not A/B'd
+against the default. It is pinned so the same plan gets the same scrutiny on any machine. The flag
+combination itself is verified — `-c 'model_reasoning_effort="high"'` alongside `-s read-only`,
+`--output-schema`, `-o` and stdin is accepted by `codex-cli 0.146.0`.
 
 A model id this account cannot use **fails loudly** — verified, not assumed. `codex exec` exits `1`
 and prints:
