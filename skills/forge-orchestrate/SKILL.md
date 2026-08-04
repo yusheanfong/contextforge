@@ -139,7 +139,8 @@ First, parse the **backend subcommand**: if `$ARGUMENTS` starts with the bare wo
 flag — same shape as `/forge-contextmap sync` — and it must be parsed first so that both
 `/forge-orchestrate codex --no-commit <feature>` and `/forge-orchestrate codex doc/diagnosis-x.md`
 resolve correctly. Under `[BACKEND] = codex`, read `references/codex-backend.md` now and run its C1
-preflight before the council; a preflight failure stops the run before anything is written.
+preflight before the council; a missing `codex` binary stops the run before anything is written, and
+its other checks warn and continue.
 
 Announce the parse in one line — `Backend: codex — Claude and Codex plan as a council, Codex
 implements.` — and continue without blocking. A feature request whose own first word is "codex" would otherwise be
@@ -823,7 +824,7 @@ When all subtasks are complete:
 ### 6z. Scratch cleanup — reachable from every exit, not only from a finished run
 
 Phase 6 used to be the only place this happened, so every early exit leaked scratch. Call this step
-from **all** of them: the C1 preflight failure, a model-unavailable stop, the council's unresolved
+from **all** of them: the C1.1 no-`codex`-binary stop, a model-unavailable stop, the council's unresolved
 approval stop, a dirty-tree abort, the no-test-runner abort, a secrets hard block, a gate that failed
 3×, and the normal end of Phase 6.
 
@@ -838,7 +839,7 @@ session and owns its own files.
 - **The council's approval stop is a pause, not an abort — keep everything.** The user is expected to
   answer and continue, and the payloads, slices and round results are the state that continuation
   needs. Deleting them there turns a question into a restart.
-- **A C1 preflight failure needs no cleanup at all** — it fires before the run has written anything.
+- **A C1.1 preflight stop needs no cleanup at all** — it fires before the run has written anything.
 
 **Worktree mode:** follow the cleanup section of `references/worktree-mode.md`. Note it does not
 cover the exits above: a gate or secrets failure after Phase 4 leaves a worktree holding uncommitted

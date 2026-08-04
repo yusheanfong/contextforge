@@ -15,23 +15,28 @@ Behaviour below was verified against `codex-cli 0.146.0`.
 
 ---
 
-## C1. Preflight — run before the council, stop on failure
+## C1. Preflight — run before the council
 
-Never edit `~/.codex/config.toml` yourself. Print the fix and stop. A preflight failure needs no
-cleanup: it fires before the run has created a single artifact.
+Only C1.1 stops the run: with no `codex` binary there is no backend. The rest print and continue,
+because C4 names `CLAUDE.md` in every payload and their failure modes degrade the run rather than
+break it. **Never edit `~/.codex/config.toml` yourself** — print the fix and let the operator decide.
+A C1.1 stop needs no cleanup: it fires before the run has created a single artifact.
 
 1. **`codex` on PATH** — `codex --version`. Missing → stop:
    ```
    /forge-orchestrate codex needs the Codex CLI. Install it, then re-run.
    ```
-2. **Codex must read this project's `CLAUDE.md`.** Codex reads `AGENTS.md`, not `CLAUDE.md`, and the
-   3c payload deliberately omits the engineering-discipline rules because a Claude subagent
-   auto-loads the project's `CLAUDE.md`. Codex only picks it up through a config key. Check for
-   `project_doc_fallback_filenames` in `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`).
-   Missing → stop with this exact remediation:
+2. **Codex must read this project's `CLAUDE.md`.** Codex auto-loads `AGENTS.md`, not `CLAUDE.md`,
+   and the 3c payload deliberately omits the engineering-discipline rules because a Claude subagent
+   auto-loads the project's `CLAUDE.md` for free. Two things get it to Codex, and they are not
+   equivalent: the config key below makes it **auto-load** (in a repo with no `AGENTS.md`), while
+   C4's prepended line makes every dispatch **read it on instruction**. C4 always fires, so this is
+   a warning, not a stop. Check for `project_doc_fallback_filenames` in `~/.codex/config.toml` (or
+   `$CODEX_HOME/config.toml`). Missing → print and continue:
    ```
-   Codex will not read this project's CLAUDE.md — its engineering rules would be silently
-   dropped from every dispatch. Add this line to ~/.codex/config.toml, then re-run:
+   Note: ~/.codex/config.toml has no project_doc_fallback_filenames, so Codex will not auto-load
+   this project's CLAUDE.md. Every dispatch names the file explicitly, so its rules still reach
+   Codex — but auto-loading is the stronger guarantee. To get it, add this line and re-run:
 
        project_doc_fallback_filenames = ["CLAUDE.md"]
    ```
