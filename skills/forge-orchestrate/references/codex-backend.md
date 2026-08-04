@@ -278,6 +278,9 @@ is cosmetic and is the operator's own configuration, so do not try to strip it: 
 their content and write the plan in your own words, which 1b.2 already requires. Never paste a
 proposal string straight into the printed decomposition.
 
+The execute path has the same styled-output exposure in its `FILES CHANGED:` output; C5 normalizes it
+before reconciliation.
+
 **Rounds 2–3 — the critique.** `..._critique_schema.json`, unchanged from the audit it replaces:
 
 ```json
@@ -552,6 +555,26 @@ After it returns, run the identical command again and take the delta. `--porcela
 than `git diff --name-only` because it also reports untracked files, which a new-file subtask
 produces. Note it can report a whole **directory** (`?? src/__pycache__/`), not only files — match on
 the path prefix, not on exact filenames.
+
+First locate the heading: match a line whose text, after stripping markdown emphasis characters and
+surrounding whitespace, equals `FILES CHANGED:`. A captured dispatch returned:
+
+```
+**FILES CHANGED:**
+
+- [codex-backend.md](/Users/yushean/Desktop/Contextforge/skills/forge-orchestrate/references/codex-backend.md:281)
+```
+
+**Normalize Codex's claimed list before comparing.** C4 asks for plain paths, but a request is not a
+contract: the same styled-output exposure C3 documents for the council's prose fields also applies
+to the execute path's file list. For each claimed line under that heading, strip leading and trailing
+whitespace and a leading markdown list marker (`- `, `* `, or `1. `); when it is a markdown link,
+take its target rather than its display text; strip surrounding backticks; drop a trailing `:<line>`
+or `:<line>:<column>` suffix; relativize an absolute path to the repository root; then discard it if
+it is empty. Thus the captured entry normalizes to
+`skills/forge-orchestrate/references/codex-backend.md`, and a line consisting of `` `index.html` ``
+followed by trailing whitespace normalizes to `index.html`. This normalization applies to the claimed
+list only, not the git delta.
 
 **Two inputs, three outcomes.** Intersect the git delta with Codex's `FILES CHANGED:` list:
 
