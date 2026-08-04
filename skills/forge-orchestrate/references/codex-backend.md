@@ -603,7 +603,10 @@ The retry payload is the failure log alone — the gate output, the reviewer's `
 delete-list. Not the original payload: the session still holds every file it read and every edit it
 made.
 
-Resume prints a new session id; record it, because the next retry resumes from that one.
+**The session id is stable across resumes: keep resuming the id captured at the first dispatch.** The
+wrong rule sends an operator hunting resume output for an id that never appears, then needlessly
+falling back to a full re-dispatch with the whole payload. The direction is harmless — re-resuming
+the original id works — which is why the error survived unnoticed.
 
 If the session id was never captured or resume errors, fall back to a fresh `codex exec` with the
 **full** payload plus the failure log — the same fallback 5c already documents for a dead agent.
