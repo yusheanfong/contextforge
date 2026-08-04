@@ -265,8 +265,9 @@ back wearing whatever house style the operator's **global `~/.codex/AGENTS.md`**
 confidence tags, the lot. Observed in fixture runs, including one whose entire prompt was "Reply with
 the single word ok" and which still opened with the operator's greeting rule. That global file is the
 carrier, not `project_doc_fallback_filenames`: the key routes the *project's* `CLAUDE.md`, while the
-style arrives from `~/.codex/AGENTS.md`, which on this machine is a verbatim copy of the operator's
-global `~/.claude/CLAUDE.md`. Naming the wrong cause sends an operator to edit the wrong file.
+style arrives from `~/.codex/AGENTS.md` — which operators who keep one house style across both CLIs
+often maintain as a copy of their global `~/.claude/CLAUDE.md`. Naming the wrong cause sends an
+operator to edit the wrong file.
 
 The payloads ask for plain text (below), which handles the common case. Whatever still arrives styled
 is cosmetic and is the operator's own configuration, so do not try to strip it: read these fields for
