@@ -44,6 +44,10 @@ Run these checks in order and jump to the matching section:
    (old-format project — upgrade it) — read `references/migration.md` and follow it exactly
 4. Check if `graphify-out/graph.json` exists in the current directory
    - If yes → go to **SYNC MODE** — read `references/sync.md` and follow it exactly
-5. Count source files: `.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.dart`, `.go`, `.cs`, `.java`, `.rb`, `.rs`, `.swift`, `.kt`, `.cpp`, `.c`, `.h`
-   - If any found → go to **EXISTING PROJECT MODE** — read `references/existing-project.md` and follow it exactly
+5. Count project files by extension (case-insensitive; this is a shell-level file count):
+   - Source: `.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.dart`, `.go`, `.cs`, `.java`, `.rb`, `.rs`, `.swift`, `.kt`, `.cpp`, `.c`, `.h`. This is not Graphify's complete code dispatch set — it omits `.php`, `.scala`, `.sh`, `.vue`, `.svelte`, `.m`, so a repo using only those suffixes counts as zero source here.
+   - Documentation: `.md`, `.mdx`, `.qmd`, `.skill` (the same suffixes as `DOC_SUFFIXES` in
+     `references/sync.md` Step S2.5)
+   - If the source count is non-zero → go to **EXISTING PROJECT MODE** — read `references/existing-project.md` and follow it exactly
+   - If the source count is zero and the documentation count is at least two → go to **EXISTING PROJECT MODE** — read `references/existing-project.md` and follow it exactly. The two-file floor is a judgment call, not a measured threshold: one README commonly describes intent for a project that does not exist yet; two documents are the minimum corpus this mode treats as material to analyze.
 6. Otherwise → go to **NEW PROJECT MODE** — read `references/new-project.md` and follow it exactly

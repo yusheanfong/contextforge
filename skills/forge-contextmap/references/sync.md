@@ -74,10 +74,18 @@ versions. Never hardcode an invocation — resolve it once, then reuse.
    graphify --help
    ```
    Confirm three things and note what you find:
-   - **The build verb.** There is **no bare `graphify <path>` form.** Building is
-     `graphify extract <path>` — "headless full extraction (AST + semantic LLM)". Append
-     **`--code-only`** when no LLM API key is configured: it indexes code by local AST with no API
-     call, which is also the right choice for a code-only repo.
+   - **The build verb, selected by corpus composition.** Count files in the `.graphifyignore`-scoped
+     corpus by extension before the first build, using the same case-insensitive shell-level counts
+     as SKILL.md Step 1. Documentation is
+     `.md`, `.mdx`, `.qmd`, `.skill` — the suffix half of S2.5's `is_doc` test; `DOC_TYPES` cannot
+     exist until after extraction. The source suffixes are the source list from SKILL.md Step 1.
+     When the source count is zero, use `graphify update <path>`, which cold-builds AST-extractable
+     documents without an LLM backend. The boundary is zero rather than a majority because
+     `extract` already produces a graph when any detected source file is present, while S2.5 would
+     strip the doc nodes added by `update` from that mixed graph anyway. Otherwise use `graphify
+     extract <path>` — "headless full extraction (AST + semantic LLM)" — and append
+     **`--code-only`** when no LLM API key is configured; it indexes real source by local AST with no
+     API call. There is **no bare `graphify <path>` form.**
    - **The shrink-override flag on `update`.** `graphify update` is incremental and **refuses to
      overwrite `graph.json` when the rebuild has fewer nodes than the existing graph.** As of 0.9.26
      the override is `--force` (`overwrite graph.json even if the rebuild has fewer nodes`; env var
@@ -87,9 +95,11 @@ versions. Never hardcode an invocation — resolve it once, then reuse.
 4. Write `graphify-out/.graphify_cli` with the **Write tool** (create `graphify-out/` first if the
    directory does not exist — in EXISTING PROJECT MODE it will not until graphify's first run):
    ```
-   build=[GRAPHIFY] extract . <--code-only if no LLM backend is configured>
+   build=[GRAPHIFY] update .                                      <no source files>
+   build=[GRAPHIFY] extract . <--code-only if no LLM backend is configured>  <one or more source files>
    update=[GRAPHIFY] update . <force-flag if step 3 found one>
    ```
+   Write exactly one `build=` line: the branch selected from the corpus counts.
 5. Use those two commands verbatim wherever this skill needs to build or update the graph.
 
 *Why probe instead of hardcode:* `python -m graphify . --update` — the invocation this skill used to

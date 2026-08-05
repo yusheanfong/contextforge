@@ -106,6 +106,9 @@ If `graphify install` fails (command not found), try:
 
 ### Step E2.5: Resolve the Graphify CLI
 
+Complete E3's `.graphifyignore` corpus-scope check before resolving the build command, so the
+composition count sees the same files Graphify will build.
+
 Follow the `graphify-cli` shared block in `references/sync.md` Step S1.5 — it
 probes the installed CLI once and caches `build=` / `update=` commands to
 `graphify-out/.graphify_cli`. Do not hardcode an invocation here; graphify's CLI is verb-based
@@ -125,11 +128,11 @@ Three commands, in this order:
 1. The `build=` command resolved in E2.5 — full AST extraction.
 2. The prune script from `references/sync.md` Step S2.5 (write it, run it, delete it — do not
    duplicate the script here).
-3. **`graphify cluster-only .`** — append **`--no-label`** when no LLM backend is configured (the
-   same condition that put `--code-only` on `build=`). This is what writes `GRAPH_REPORT.md`.
+3. **`graphify cluster-only .`** — append **`--no-label`** when no LLM backend is configured,
+   regardless of which build branch ran. This is what writes `GRAPH_REPORT.md`.
 
 This will take time depending on codebase size. Wait for each to complete. Together they produce:
-- `graphify-out/graph.json` — the knowledge graph, code-only
+- `graphify-out/graph.json` — the knowledge graph
 - `graphify-out/GRAPH_REPORT.md` — human-readable summary
 
 If any step fails, print the error and ask the user to check their Graphify installation.
@@ -139,12 +142,16 @@ If any step fails, print the error and ask the user to check their Graphify inst
 > CLAUDE.md Rule 1 both tell readers to open that file, so without step 3 the very first session
 > after scaffolding hits a missing file.
 >
-> **`graphify update` is NOT a substitute — do not use it here.** It short-circuits on an unchanged
-> graph: `[graphify watch] No code-graph topology changes detected; outputs left untouched.` Straight
-> after a fresh `extract` nothing *has* changed, so it writes no report. It only appears to work on a
-> repo that already contains markdown, because then `update` adds doc nodes, topology changes, and
-> the report gets written as a side effect — which is the contamination this skill exists to prevent.
-> On a pure-code repo it silently does nothing.
+> **On a source-predominant corpus, `graphify update` is NOT a substitute for `extract`.** It
+> short-circuits on an unchanged graph: `[graphify watch] No code-graph topology changes detected;
+> outputs left untouched.` Straight after a fresh `extract` nothing *has* changed, so it writes no
+> report. It only appears to work on a repo that already contains markdown, because then `update`
+> adds doc nodes, topology changes, and the report gets written as a side effect — which is the
+> contamination this skill exists to prevent. On a pure-code repo it silently does nothing.
+> The zero-source documentation branch is the deliberate exception to that contamination concern:
+> with no code graph, documentation is the corpus, `extract --code-only` skips it and writes no
+> graph, and `update` cold-builds it. Step 3 still runs in both branches; neither branch relies on
+> the build command to write `GRAPH_REPORT.md`.
 >
 > **`--no-label` is what keeps `cluster-only` safe.** Bare `cluster-only` runs LLM community naming
 > and stalls on a box with no API key. With `--no-label` it re-clusters locally and leaves
