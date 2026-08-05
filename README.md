@@ -487,16 +487,18 @@ subagent — an executor grading its own diff is the weakest possible critic), a
 Codex is forbidden from touching git; the main session stages from a `git status --porcelain`
 before/after delta rather than trusting the executor's self-report.
 
-**Setup, once.** Codex reads `AGENTS.md`, not `CLAUDE.md`, so the `CLAUDE.md` that `/forge-contextmap`
-generates needs one line in `~/.codex/config.toml` to reach it:
+**Setup, once.** Codex looks for `AGENTS.md` before any fallback `CLAUDE.md`. To make the `CLAUDE.md`
+that `/forge-contextmap` generates a fallback when no `AGENTS.md` exists, add one line to
+`~/.codex/config.toml`:
 
 ```toml
 project_doc_fallback_filenames = ["CLAUDE.md"]
 ```
 
-The skill checks for this and stops with that exact line if it's missing. It also stops if the repo
-has **both** `AGENTS.md` and `CLAUDE.md` — `AGENTS.md` wins and your ContextForge rules would be
-silently dropped.
+If that line is missing, the skill warns and continues because every Codex dispatch names
+`CLAUDE.md` explicitly. If the repo has **both** files, it compares them, ignores differences
+confined to graphify fence marker names, and warns on any remaining drift — including drift inside a
+fence — then continues. Only a missing `codex` binary stops the preflight.
 
 ---
 
@@ -638,9 +640,11 @@ asking for approval at every step. It interrupts you in exactly these cases:
 - **No test runner detected** — warns loudly and asks once, because the success criterion can't be
   verified. Records `unverified — no test tooling` in the results either way. Never a fake green.
 - **A gate fails 3×** — stops and reports. Bounded loop, never infinite.
-- **`codex` preflight fails** — no Codex CLI, no `project_doc_fallback_filenames`, or the repo has
-  both `AGENTS.md` and `CLAUDE.md`. Prints the exact fix and stops before writing anything. It never
-  edits your `~/.codex/config.toml`.
+- **No Codex CLI** — the only `codex` preflight stop, and it happens before anything is written. A
+  missing `project_doc_fallback_filenames` warns and continues because every dispatch names
+  `CLAUDE.md` explicitly. If both `AGENTS.md` and `CLAUDE.md` exist, the preflight warns only when
+  they differ beyond graphify fence marker names, then continues. It never edits your
+  `~/.codex/config.toml`.
 - **The `codex` planning council ends unresolved** — a critique Claude couldn't resolve, or a round
   that returned nothing usable. Claude finalizes the plan either way, then prints Codex's objection
   and its risk and asks before executing. Never a 4th planning call, and never a run that claims

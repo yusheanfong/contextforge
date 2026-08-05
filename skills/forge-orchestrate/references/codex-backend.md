@@ -52,8 +52,12 @@ A C1.1 stop needs no cleanup: it fires before the run has created a single artif
    No `AGENTS.md` in the repo root → nothing to do. If there is one, diff it:
 
    ```bash
-   git diff --no-index --ignore-all-space -- CLAUDE.md AGENTS.md
+   git diff --no-index --ignore-all-space -I'graphify:auto' -- CLAUDE.md AGENTS.md
    ```
+
+   `-I` requires Git 2.30 or newer; an older Git errors on the flag. It drops a hunk only when all
+   its changed lines match `graphify:auto`, so a graphify fence marker-name-only difference is
+   silent. Real drift inside a fence keeps the hunk and still warns.
 
    Empty → the shadowing is harmless; continue silently. Non-empty → print the drifted section
    headings and **continue**:
