@@ -213,9 +213,12 @@ if ratio > MAX_DROP_RATIO:
 # Doc drop is accounted SEPARATELY from stale — folding it into MAX_DROP_RATIO would
 # trip the refusal on a doc-heavy repo, which is not the failure that guard exists for.
 doc_ids = {n["id"] for n in nodes if is_doc(n)}
-if doc_ids and not (total - len(stale_ids | doc_ids)):
-    # Markdown-only corpus: dropping every node would write ten empty fences.
-    print(f"Corpus is documentation — doc filter disabled ({len(doc_ids)} doc node(s) kept).")
+if doc_ids and len(doc_ids) * 2 > total:
+    # Mostly-prose corpus: dropping its majority content would empty its doc fences.
+    print(
+        f"Doc filter disabled: documentation is the majority ({len(doc_ids)}/{total} nodes); "
+        f"{len(doc_ids - stale_ids)} non-stale doc node(s) kept."
+    )
     doc_ids = set()
 
 drop = stale_ids | doc_ids
@@ -255,8 +258,10 @@ Five guards are load-bearing — do not simplify them away:
   semantic pass mints `file_type="code"` nodes for symbols it surfaced from *inside* a `.md` file. A
   `file_type == 'code'` test alone passes those straight through. Suffix comparison is lowercased
   because macOS is case-insensitive and graphify itself dispatches on `suffix.lower()`.
-- **The all-doc floor.** If dropping docs would empty the graph, the filter disables itself. A
-  markdown-only repo would otherwise get ten docs written with empty fences.
+- **The majority-doc floor.** If doc-derived nodes are more than half of all graph nodes, the filter
+  disables itself. Total nodes are the denominator because this classifies the graph consumed by
+  the fences; incidental code nodes must not make a prose corpus discard its content. The printed
+  kept count excludes stale docs, which the stale-node path still handles separately.
 
 **Expect the node count to oscillate, and do not "fix" it.** The post-commit hook runs
 `graphify update`, which re-adds doc nodes; the next sync drops them again. The oscillation lives
