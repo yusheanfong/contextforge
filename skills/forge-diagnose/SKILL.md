@@ -118,7 +118,7 @@ they reject it, loop back to PHASE 3 or PHASE 4 with the new information.
 
 ## PHASE 6: Emit Handoff
 
-1. Read `references/handoff-template.md` (in this skill's directory, next to SKILL.md) and fill it
+1. Read [`references/handoff-template.md`](references/handoff-template.md) (in this skill's directory, next to SKILL.md) and fill it
    from the investigation.
 2. Write to `doc/diagnosis-[SLUG].md`. If that file already exists (earlier diagnosis of the same
    issue), Read it first, then overwrite — the old diagnosis is superseded, and Write refuses to

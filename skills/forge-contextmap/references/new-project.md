@@ -47,13 +47,13 @@ Wait for confirmation or corrections. Store as `[FEATURES]`.
 
 **Question 4 — Design (only if `[HAS_UI]`):** "Describe the look/vibe you want (or give brand colors/fonts if you have them). e.g. 'clean fintech, trustworthy' or 'playful, colorful, rounded'."
 
-Wait for answer, then **generate a complete concrete design system** — see **`references/design-brief-generation.md`**. Show the generated token set for approval; apply corrections. Store as `[DESIGN_SYSTEM]`.
+Wait for answer, then **generate a complete concrete design system** — see **[`references/design-brief-generation.md`](design-brief-generation.md)**. Show the generated token set for approval; apply corrections. Store as `[DESIGN_SYSTEM]`.
 
 If `[HAS_UI]` is false, skip this question and do not create `doc/design-brief.md`.
 
 ### Step N2: Scaffold All Files
 
-Use the Write tool to create each file from the templates in `references/doc-templates.md` (File 1–File 13). Replace `[GOAL]`, `[TECH_STACK]`, `[FEATURES]`, `[DESIGN_SYSTEM]` with the gathered values. Do not skip any file (except the two conditional ones: `design-brief.md` only if `[HAS_UI]`, `backend-schema.md` only if `[HAS_BACKEND]`).
+Use the Write tool to create each file from the templates in [`references/doc-templates.md`](doc-templates.md) (File 1–File 13). Replace `[GOAL]`, `[TECH_STACK]`, `[FEATURES]`, `[DESIGN_SYSTEM]` with the gathered values. Do not skip any file (except the two conditional ones: `design-brief.md` only if `[HAS_UI]`, `backend-schema.md` only if `[HAS_BACKEND]`).
 
 ### Step N3: Generate Draft Engineering Plan (task list)
 
@@ -71,7 +71,7 @@ Here's the draft engineering plan and app flow I created based on your goal and 
 Review them and tell me what to add, remove, or change before we finalize.
 ```
 
-The task list format is defined in `references/doc-templates.md` ("Task List Format").
+The task list format is defined in [`references/doc-templates.md`](doc-templates.md) ("Task List Format").
 
 Wait for user feedback on the plan. Apply any changes they request. Once approved, confirm:
 
@@ -105,7 +105,7 @@ Next steps:
 After creating all files, install the post-commit hook.
 
 **First resolve `[PYTHON_CMD]`** — NEW PROJECT MODE has no earlier step that does. Follow the
-`python-cmd` shared block in `references/sync.md` Step S1.
+`python-cmd` shared block in [`references/sync.md`](sync.md) Step S1.
 
 One relaxation applies **here only**: the installer below is **stdlib-only** — no networkx, no
 graphify. So if every ladder candidate fails its `import networkx` check, do **not** hard-stop the

@@ -68,7 +68,7 @@ versions. Never hardcode an invocation — resolve it once, then reuse.
    graphify --version
    ```
    If the command is not found, graphify is not installed — print the install guidance from
-   `references/existing-project.md` Step E2 and STOP. Call the resolved command `[GRAPHIFY]`.
+   [`references/existing-project.md`](existing-project.md) Step E2 and STOP. Call the resolved command `[GRAPHIFY]`.
 3. Read the command list — it is the authority, not this file:
    ```bash
    graphify --help
@@ -291,7 +291,7 @@ Delete `graphify-out/.forge_prune.py` when done.
 ### Step S3: Parse Updated Graph
 
 Re-parse the pruned `graphify-out/graph.json` using the **same `.forge_parse.py` script** as Step E4
-in `references/existing-project.md` — write it, run it, read its output, delete it. **Do not open
+in [`references/existing-project.md`](existing-project.md) — write it, run it, read its output, delete it. **Do not open
 `graph.json` with the Read tool**; it is ~424 KB on a small repo.
 
 ### Step S3.5: Diff Graph and Draft Changelog

@@ -28,7 +28,7 @@ content preserved.
   from the graph it already loaded. Counts only — it reads no source and writes nothing extra;
   `/forge-audit` is what confirms those pointers against real code.
 - `doc/prd.md` and `doc/task-list.md` have NO fences — 100% user-owned.
-- Fence syntax + v2 fence key list: `references/fence-format.md`.
+- Fence syntax + v2 fence key list: [`references/fence-format.md`](references/fence-format.md).
 
 ---
 
@@ -36,18 +36,18 @@ content preserved.
 
 Run these checks in order and jump to the matching section:
 
-1. If `$ARGUMENTS` contains `sync` → go to **SYNC MODE** — read `references/sync.md` and follow it exactly
-2. If `$ARGUMENTS` contains `--new` → go to **NEW PROJECT MODE** — read `references/new-project.md` and follow it exactly
+1. If `$ARGUMENTS` contains `sync` → go to **SYNC MODE** — read [`references/sync.md`](references/sync.md) and follow it exactly
+2. If `$ARGUMENTS` contains `--new` → go to **NEW PROJECT MODE** — read [`references/new-project.md`](references/new-project.md) and follow it exactly
 3. If `doc/` exists AND contains at least one ContextForge doc (`architecture.md`,
    `task-list.md`, `solution-structure.md`, or `ui-guideline.md`) AND `CLAUDE.md` does NOT
    contain the marker `<!-- contextforge:format v2 -->` → go to **MIGRATION MODE**
-   (old-format project — upgrade it) — read `references/migration.md` and follow it exactly
+   (old-format project — upgrade it) — read [`references/migration.md`](references/migration.md) and follow it exactly
 4. Check if `graphify-out/graph.json` exists in the current directory
-   - If yes → go to **SYNC MODE** — read `references/sync.md` and follow it exactly
+   - If yes → go to **SYNC MODE** — read [`references/sync.md`](references/sync.md) and follow it exactly
 5. Count project files by extension (case-insensitive; this is a shell-level file count):
    - Source: `.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.dart`, `.go`, `.cs`, `.java`, `.rb`, `.rs`, `.swift`, `.kt`, `.cpp`, `.c`, `.h`. This is not Graphify's complete code dispatch set — it omits `.php`, `.scala`, `.sh`, `.vue`, `.svelte`, `.m`, so a repo using only those suffixes counts as zero source here.
    - Documentation: `.md`, `.mdx`, `.qmd`, `.skill` (the same suffixes as `DOC_SUFFIXES` in
-     `references/sync.md` Step S2.5)
-   - If the source count is non-zero → go to **EXISTING PROJECT MODE** — read `references/existing-project.md` and follow it exactly
-   - If the source count is zero and the documentation count is at least two → go to **EXISTING PROJECT MODE** — read `references/existing-project.md` and follow it exactly. The two-file floor is a judgment call, not a measured threshold: one README commonly describes intent for a project that does not exist yet; two documents are the minimum corpus this mode treats as material to analyze.
-6. Otherwise → go to **NEW PROJECT MODE** — read `references/new-project.md` and follow it exactly
+     [`references/sync.md`](references/sync.md) Step S2.5)
+   - If the source count is non-zero → go to **EXISTING PROJECT MODE** — read [`references/existing-project.md`](references/existing-project.md) and follow it exactly
+   - If the source count is zero and the documentation count is at least two → go to **EXISTING PROJECT MODE** — read [`references/existing-project.md`](references/existing-project.md) and follow it exactly. The two-file floor is a judgment call, not a measured threshold: one README commonly describes intent for a project that does not exist yet; two documents are the minimum corpus this mode treats as material to analyze.
+6. Otherwise → go to **NEW PROJECT MODE** — read [`references/new-project.md`](references/new-project.md) and follow it exactly
