@@ -382,8 +382,10 @@ Include, paths not pasted text:
   design.
 - The path `graphify-out/graph.json`, the project's `CLAUDE.md`, and the `doc/*.md` paths that exist.
 - The **task-level** slice's `FILES` list, labelled advisory: it was produced from Claude's choice of
-  key words and is a starting point, not a boundary. `NO_MATCH` → say the graph had no specific match
-  and name the universal docs only.
+  key words and is a starting point, not a boundary. The task-level slice is the degraded case;
+  per-subtask queries are more reliable. Council per-subtask slices remain advisory, and only Phase
+  3a's re-run supplies the execution slice. `NO_MATCH` → say the graph had no specific match and
+  name the universal docs only.
 - These questions, verbatim:
   ```
   Propose your own decomposition of this task. Inspect the repository yourself — the file list
