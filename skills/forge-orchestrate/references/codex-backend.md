@@ -566,8 +566,9 @@ the path prefix, not on exact filenames. The snapshot is a path list, not conten
 which paths changed status, never whether a write completed. Also record the moment of dispatch in
 the subtask state; do not create another snapshot artifact for it.
 
-First locate the heading: match a line whose text, after stripping markdown emphasis characters and
-surrounding whitespace, equals `FILES CHANGED:`. A captured dispatch returned:
+**Normalize Codex's claimed list before comparing.** First locate the heading: match a line whose
+text, after stripping markdown emphasis characters and surrounding whitespace, equals
+`FILES CHANGED:`. A captured dispatch returned:
 
 ```
 **FILES CHANGED:**
@@ -575,13 +576,26 @@ surrounding whitespace, equals `FILES CHANGED:`. A captured dispatch returned:
 - [codex-backend.md](/Users/yushean/Desktop/Contextforge/skills/forge-orchestrate/references/codex-backend.md:281)
 ```
 
-**Normalize Codex's claimed list before comparing.** C4 asks for plain paths, but a request is not a
-contract: the same styled-output exposure C3 documents for the council's prose fields also applies
-to the execute path's file list. For each claimed line under that heading, strip leading and trailing
-whitespace and a leading markdown list marker (`- `, `* `, or `1. `); when it is a markdown link,
-take its target rather than its display text; strip surrounding backticks; drop a trailing `:<line>`
-or `:<line>:<column>` suffix; relativize an absolute path to the repository root; then discard it if
-it is empty. Thus the captured entry normalizes to
+Scan forward from the heading. Blank lines are separators: ignore them immediately after the
+heading and between entries. End the list before the first line that begins an ATX markdown heading
+(`#` through `######` followed by whitespace) or matches the `^tokens used` run trailer; neither can
+be a legitimate path. Apply the full normalization below to every other candidate line before
+deciding whether it belongs to the list.
+
+C4 asks for plain paths, but a request is not a contract: the same styled-output exposure C3
+documents for the council's prose fields also applies to the execute path's file list. For each
+candidate line, strip leading and trailing whitespace and a leading markdown list marker (`- `,
+`* `, or one or more decimal digits followed by `. `); the numeric form covers ordered lists because
+their marker changes after the first item. When it is a markdown link, take its target rather than
+its display text; strip surrounding backticks; drop a trailing `:<line>` or
+`:<line>:<column>` suffix; relativize an absolute path to the directory `codex exec` ran in — the
+same directory the snapshot used — so both inputs are relative to the same root by construction;
+then discard it if it is empty. After that pass, a claimed path is a single token: if a nonempty
+normalized value still contains interior whitespace, end the list before that line rather than
+discarding only that line. This stops at closing prose instead of scanning past it and possibly
+ingesting a later one-token sign-off as a path. Its known failure mode is prose between two real
+paths: the later paths are dropped; a per-line discard would preserve them but would not bound
+closing prose. Thus the captured entry normalizes to
 `skills/forge-orchestrate/references/codex-backend.md`, and a line consisting of `` `index.html` ``
 followed by trailing whitespace normalizes to `index.html`. This normalization applies to the claimed
 list only, not the git delta.
@@ -680,7 +694,7 @@ entirely.
 | Empty or unparseable `-o` file after a council round | run died before its final turn | it still counts against the 3 — degrade per C3, never score it `verified` |
 | A council round's JSON parses but has duplicate ids, a dangling `depends_on`, a cycle, or an unrelated `execution_order` | schema validity is not semantic validity | same as unparseable — degraded, and the call is spent (C3) |
 | Round 3 dispatched but `council.round2_session_id` was never captured | the session id was not read off stdout at round 2 | fall back to a fresh `codex exec` carrying round 2's findings in the payload; it is still call 3 |
-| `git status` delta is empty after execute | **check the snapshot cwd first** (C5) — in worktree mode a bare `git status` reads the main checkout and always comes back empty. Otherwise Codex answered without editing | fix the `-C`; if the cwd was right, re-dispatch with the goal restated — unless the dispatch was killed or has no `tokens used` trailer; use the row below |
-| A dispatch was killed mid-run or has no `tokens used` trailer | detachment removes the cap but does not guarantee survival. With a dirty baseline, the status delta is unsound: status reports a path's status, not content, and C5's snapshot is a path list, never a completion record | **This overrides the empty-delta row above.** Baseline clean + delta empty: nothing was written; resume the session id. Baseline clean + delta non-empty: inspect the subtask's changes; `git checkout -- <path>` is safe for tracked paths because HEAD is this subtask's baseline. Baseline dirty: **never restore** — inspect every scoped path's diff before resuming, because HEAD would erase earlier subtasks. In worktree mode, use C5's `git -C <worktree abs path> status --porcelain` form for all three snapshots. |
+| `git status` delta is empty after execute | **check the snapshot cwd first** (C5) — in worktree mode a bare `git status` reads the main checkout and always comes back empty. Otherwise no tracked path changed | fix the `-C`; if the cwd was right, confirm any scoped ignored paths per C5, then re-dispatch with the goal restated only if no write was confirmed — unless the dispatch was killed or has no `tokens used` trailer; use the row below |
+| A dispatch was killed mid-run or has no `tokens used` trailer | detachment removes the cap but does not guarantee survival. With a dirty baseline, the status delta is unsound: status reports a path's status, not content, and C5's snapshot is a path list, never a completion record | **This overrides the empty-delta row above.** Baseline clean + delta empty: no tracked path was written; an ignored path may still have been written, so when the subtask scopes ignored paths, confirm them per C5 before treating this as a clean resume. Otherwise resume the session id. Baseline clean + delta non-empty: inspect the subtask's changes; `git checkout -- <path>` is safe for tracked paths because HEAD is this subtask's baseline. Untracked paths in the delta are this subtask's creations: inspect them and leave them unless the user chooses removal; never use `git clean` here. Baseline dirty: **never restore** — inspect every scoped path's diff before resuming, because HEAD would erase earlier subtasks. In worktree mode, use C5's `git -C <worktree abs path> status --porcelain` form when evaluating all three branches. |
 | Reconciled delta contains files from an unrelated subtask | `[NO_COMMIT]`, no moving baseline | expected; 5b's out-of-scope note (single-tree `[NO_COMMIT]`) covers it |
 | `NEEDS_CONTEXT` in the final message | Codex lacked a doc or file | supply it and re-dispatch via C6, same as a Claude worker |
