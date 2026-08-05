@@ -102,8 +102,10 @@ A killed execute subprocess leaves a half-written working tree that C5 would the
 Planning calls are not reliably the short ones. A `sol`/`high` council-class call over this repo
 **exceeded the 10-minute cap and was killed**; the identical call run detached finished normally. A
 killed planning call is a burnt budget slot (C3 counts it), so run every dispatch — execute *and*
-council — with `run_in_background: true` and read the result file when it lands. Do not give a
-planning call a foreground timeout; there is no timeout value that is both safe and under the cap.
+council — with `run_in_background: true` and read the result file when it lands. Detachment removes
+the tool's 10-minute cap; it does not guarantee the process survives, so C7's killed-mid-run
+recovery is required. Do not give a planning call a foreground timeout; there is no timeout value
+that is both safe and under the cap.
 
 **Never `--ephemeral`** — it skips writing the session file, which kills the resume path in C6 and
 council round 3. **Never `--dangerously-bypass-approvals-and-sandbox`** — `-s` is the whole safety
@@ -558,7 +560,8 @@ git -C <same dir codex exec runs in> status --porcelain > graphify-out/.orchestr
 After it returns, run the identical command again and take the delta. `--porcelain` is used rather
 than `git diff --name-only` because it also reports untracked files, which a new-file subtask
 produces. Note it can report a whole **directory** (`?? src/__pycache__/`), not only files — match on
-the path prefix, not on exact filenames.
+the path prefix, not on exact filenames. The snapshot is a path list, not content: it can report
+which paths changed status, never whether a write completed.
 
 First locate the heading: match a line whose text, after stripping markdown emphasis characters and
 surrounding whitespace, equals `FILES CHANGED:`. A captured dispatch returned:
@@ -655,6 +658,7 @@ entirely.
 | Empty or unparseable `-o` file after a council round | run died before its final turn | it still counts against the 3 — degrade per C3, never score it `verified` |
 | A council round's JSON parses but has duplicate ids, a dangling `depends_on`, a cycle, or an unrelated `execution_order` | schema validity is not semantic validity | same as unparseable — degraded, and the call is spent (C3) |
 | Round 3 dispatched but `council.round2_session_id` was never captured | the session id was not read off stdout at round 2 | fall back to a fresh `codex exec` carrying round 2's findings in the payload; it is still call 3 |
-| `git status` delta is empty after execute | **check the snapshot cwd first** (C5) — in worktree mode a bare `git status` reads the main checkout and always comes back empty. Otherwise Codex answered without editing, or was killed mid-run | fix the `-C`; if the cwd was right, re-dispatch with the goal restated |
+| `git status` delta is empty after execute | **check the snapshot cwd first** (C5) — in worktree mode a bare `git status` reads the main checkout and always comes back empty. Otherwise Codex answered without editing | fix the `-C`; if the cwd was right, re-dispatch with the goal restated — unless the dispatch was killed or has no `tokens used` trailer; use the row below |
+| A dispatch was killed mid-run or has no `tokens used` trailer | detachment removes the cap but does not guarantee survival. With a dirty baseline, the status delta is unsound: status reports a path's status, not content, and C5's snapshot is a path list, never a completion record | **This overrides the empty-delta row above.** Baseline clean + delta empty: nothing was written; resume the session id. Baseline clean + delta non-empty: inspect the subtask's changes; `git checkout -- <path>` is safe for tracked paths because HEAD is this subtask's baseline. Baseline dirty: **never restore** — inspect every scoped path's diff before resuming, because HEAD would erase earlier subtasks. In worktree mode, use C5's `git -C <worktree abs path> status --porcelain` form for all three snapshots. |
 | Reconciled delta contains files from an unrelated subtask | `[NO_COMMIT]`, no moving baseline | expected; 5b's out-of-scope note (single-tree `[NO_COMMIT]`) covers it |
 | `NEEDS_CONTEXT` in the final message | Codex lacked a doc or file | supply it and re-dispatch via C6, same as a Claude worker |
