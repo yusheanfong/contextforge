@@ -32,7 +32,7 @@ Review criteria = the **minimal-code ladder** (walk top-down, stop at the first 
 
 ### 0b. Graph prerequisite — hard-stop
 
-<!-- forge:shared-block graph-hard-stop -->
+<!-- forge:shared-block graph-hard-stop variant:audit -->
 `/forge-audit` is graph-driven. Use the Read tool (or a file check) for `graphify-out/graph.json` in the
 current directory.
 
@@ -47,7 +47,7 @@ Run /forge-contextmap first to build the knowledge graph, then re-run /forge-aud
 
 ### 0c. Resolve the Python interpreter as `[PYTHON_CMD]`
 
-<!-- forge:shared-block python-cmd -->
+<!-- forge:shared-block python-cmd variant:audit -->
 Graphify is normally installed with **uv** or **pipx**, which put it in its own virtualenv. That
 venv's python has `networkx`; your system `python3` almost certainly does not. Resolving the wrong
 one is the single most common way these scripts die. Work down this list and stop at the first
@@ -279,7 +279,7 @@ Otherwise, for each candidate, open its live `source_file` (Read tool) and confi
 against the actual code before flagging it. Walk the ladder top-down, stop at the first rung that
 applies:
 
-<!-- forge:shared-block minimal-ladder -->
+<!-- forge:shared-block minimal-ladder variant:audit -->
 1. **Does this need to exist?** → no ⇒ **delete** (YAGNI / dead code)
 2. **Already in this codebase?** → ⇒ **reuse it** (duplication — inline/collapse to the original)
 3. **Stdlib does it?** → ⇒ **replace-with-stdlib**

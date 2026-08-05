@@ -10,7 +10,7 @@
 
 ### Step S1: Resolve the Python Interpreter
 
-<!-- forge:shared-block python-cmd -->
+<!-- forge:shared-block python-cmd variant:contextmap -->
 Graphify is normally installed with **uv** or **pipx**, which put it in its own virtualenv. That
 venv's python has `networkx`; your system `python3` almost certainly does not. Resolving the wrong
 one is the single most common way these scripts die. Work down this list and stop at the first

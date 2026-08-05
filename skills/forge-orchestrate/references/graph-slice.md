@@ -19,7 +19,7 @@ from pathlib import Path
 import networkx as nx
 from networkx.readwrite import json_graph
 
-# forge:shared-block graph-loader
+# forge:shared-block graph-loader variant:slice
 data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
 G = json_graph.node_link_graph(data, edges='links')
 

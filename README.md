@@ -844,25 +844,194 @@ inside Python). Edit one copy, update the rest:
 
 | Block | Copies |
 |---|---|
-| `graph-hard-stop` | `skills/forge-orchestrate/SKILL.md` 0a · `skills/forge-audit/SKILL.md` 0b |
+| `graph-hard-stop` | `skills/forge-orchestrate/SKILL.md` 0a (`variant:orchestrate`) · `skills/forge-audit/SKILL.md` 0b (`variant:audit`) |
 | `base-branch` | `skills/forge-merge/SKILL.md` 0b · `skills/forge-orchestrate/SKILL.md` Phase 2 step 3 — the probe order must match, or the two skills can disagree about which branch is the base |
-| `python-cmd` | `skills/forge-orchestrate/SKILL.md` 0b · `skills/forge-audit/SKILL.md` 0c · `skills/forge-contextmap/references/sync.md` S1 |
+| `python-cmd` | `skills/forge-orchestrate/SKILL.md` 0b (`variant:orchestrate`) · `skills/forge-audit/SKILL.md` 0c (`variant:audit`) · `skills/forge-contextmap/references/sync.md` S1 (`variant:contextmap`) |
 | `graphify-cli` | `skills/forge-contextmap/references/sync.md` S1.5 — **one copy, not duplicated.** Both consumers live in `forge-contextmap`, so `references/existing-project.md` E2.5 just points at it. Listed here because a second skill needing the CLI must copy it rather than reach across directories. |
-| `graph-loader` | `skills/forge-orchestrate/references/graph-slice.md` · `skills/forge-audit/SKILL.md` Phase 1 · `skills/forge-contextmap/references/sync.md` S3.6 |
-| `bloat-buckets` | `skills/forge-audit/SKILL.md` Phase 1 · `skills/forge-contextmap/references/sync.md` S3.6 — thresholds must match, or sync's counts disagree with audit's |
-| `minimal-ladder` | `skills/forge-orchestrate/SKILL.md` 3c (**payload copy**) · same file 5b (review copy) · `skills/forge-audit/SKILL.md` Phase 2 |
-| `source-doc-map` | `skills/forge-orchestrate/SKILL.md` 3b · `skills/forge-contextmap/references/doc-templates.md` CLAUDE.md rule 1 |
+| `graph-loader` | `skills/forge-orchestrate/references/graph-slice.md` (`variant:slice`) · `skills/forge-audit/SKILL.md` Phase 1 · `skills/forge-contextmap/references/sync.md` S3.6 — audit/sync parity pair |
+| `bloat-buckets` | `skills/forge-audit/SKILL.md` Phase 1 · `skills/forge-contextmap/references/sync.md` S3.6 — bodies intentionally differ; the checker compares the orphan, duplicate-source, and god-node threshold expressions only |
+| `minimal-ladder` | `skills/forge-orchestrate/SKILL.md` 3c (`variant:payload` — single copy, never compared) · same file 5b (`variant:review`) · `skills/forge-audit/SKILL.md` Phase 2 (`variant:audit`) |
+| `source-doc-map` | `skills/forge-orchestrate/SKILL.md` 3b (`variant:dispatch`) · `skills/forge-contextmap/references/doc-templates.md` CLAUDE.md rule 1 (`variant:template`) |
 
 Two constraints that are not negotiable:
 
-- **The `minimal-ladder` payload copy in orchestrate 3c must stay literal text.** It is injected into
+- **The `minimal-ladder` `variant:payload` copy in orchestrate 3c must stay literal text.** It is injected into
   worker subagent prompts, and a subagent sees only its dispatch payload — never the skill file. A
   pointer there would silently ship workers with no ladder.
-- **The `source-doc-map` marker in `doc-templates.md` sits *outside* the template fence.** Everything
-  inside that fence is copied verbatim into the user's generated `CLAUDE.md`; a marker in there
-  would leak into every scaffolded project.
+- **The `source-doc-map` `variant:template` markers in `doc-templates.md` sit *outside* the template
+  fence.** Everything inside that fence is copied verbatim into the user's generated `CLAUDE.md`;
+  a marker in there would leak into every scaffolded project.
 
 Verify after editing any of them:
+
+Write this to `graphify-out/.forge_shared_blocks.py` with the **Write tool**, run it, then delete it.
+It uses only the Python standard library:
+
+```python
+import ast
+import re
+import textwrap
+from collections import defaultdict
+from pathlib import Path
+
+MARKER = re.compile(
+    r"^(/?)forge:shared-block\s+([a-z0-9-]+)"
+    r"(?:\s+variant:([a-z0-9-]+))?(?:\s+.*)?$"
+)
+HASH_MARKER = re.compile(
+    r"^\s*#\s+(/?)forge:shared-block\s+([a-z0-9-]+)"
+    r"(?:\s+variant:([a-z0-9-]+))?(?:\s+.*)?$"
+)
+
+
+def marker_at(lines, index):
+    line = lines[index]
+    match = HASH_MARKER.fullmatch(line)
+    if match:
+        return match.groups(), index + 1
+    if not line.lstrip().startswith("<!--"):
+        return None, index + 1
+
+    end = index
+    comment = line.lstrip()
+    while "-->" not in comment and end + 1 < len(lines):
+        end += 1
+        comment += "\n" + lines[end]
+    if "-->" not in comment:
+        return None, end + 1
+    content, trailing = comment[4:].split("-->", 1)
+    if trailing.strip():
+        return None, end + 1
+    match = MARKER.fullmatch(" ".join(content.split()))
+    return (match.groups() if match else None), end + 1
+
+
+def location(block):
+    return f"{block['path']}:{block['line']}"
+
+
+def normalized(body):
+    return " ".join(textwrap.dedent(body).split())
+
+
+def threshold_tokens(block):
+    tree = ast.parse(textwrap.dedent(block["body"]), filename=location(block))
+    values = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Compare) and len(node.ops) == len(node.comparators) == 1:
+            left = ast.unparse(node.left)
+            if left == "G.degree(n)" and isinstance(node.ops[0], ast.LtE):
+                values["orphan degree"] = ast.dump(node, include_attributes=False)
+            if left == "len(srcs)" and isinstance(node.ops[0], ast.Gt):
+                values["duplicate source"] = ast.dump(node, include_attributes=False)
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            if isinstance(target, ast.Name) and target.id in {"med", "cut"}:
+                values[target.id] = ast.dump(node.value, include_attributes=False)
+    missing = {"orphan degree", "duplicate source", "med", "cut"} - values.keys()
+    if missing:
+        raise ValueError("missing " + ", ".join(sorted(missing)))
+    return {
+        "orphan degree": values["orphan degree"],
+        "duplicate source": values["duplicate source"],
+        "god-node median/decile": (values["med"], values["cut"]),
+    }
+
+
+blocks = []
+problems = []
+for path in sorted(Path("skills").rglob("*.md")):
+    lines = path.read_text(encoding="utf-8").splitlines()
+    active = None
+    index = 0
+    while index < len(lines):
+        marker, next_index = marker_at(lines, index)
+        if marker:
+            closing, name, variant = marker
+            variant = variant or "default"
+            if closing:
+                if active is None:
+                    problems.append(f"unmatched closer {path}:{index + 1} ({name})")
+                elif active["name"] != name:
+                    problems.append(
+                        f"mismatched closer {path}:{index + 1} "
+                        f"({active['name']} -> {name})"
+                    )
+                    active = None
+                else:
+                    blocks.append({
+                        **active,
+                        "body": "\n".join(lines[active["body_start"]:index]),
+                    })
+                    active = None
+            elif active is not None:
+                problems.append(
+                    f"nested opener {path}:{index + 1} inside {active['name']}"
+                )
+            else:
+                active = {
+                    "name": name,
+                    "variant": variant,
+                    "path": path.as_posix(),
+                    "line": index + 1,
+                    "body_start": next_index,
+                }
+        index = next_index
+    if active is not None:
+        problems.append(f"unclosed opener {location(active)} ({active['name']})")
+
+groups = defaultdict(list)
+for block in blocks:
+    groups[(block["name"], block["variant"])].append(block)
+
+for (name, variant), copies in sorted(groups.items()):
+    if name == "bloat-buckets" or len(copies) < 2:
+        continue
+    reference = normalized(copies[0]["body"])
+    for copy in copies[1:]:
+        if normalized(copy["body"]) != reference:
+            problems.append(
+                f"{name} variant:{variant} differs: "
+                f"{location(copies[0])} vs {location(copy)}"
+            )
+
+bloat = [block for block in blocks if block["name"] == "bloat-buckets"]
+if len(bloat) < 2:
+    problems.append("bloat-buckets needs at least two copies")
+else:
+    extracted = []
+    for block in bloat:
+        try:
+            extracted.append((block, threshold_tokens(block)))
+        except (SyntaxError, ValueError) as error:
+            problems.append(f"bloat-buckets {location(block)}: {error}")
+    if len(extracted) == len(bloat):
+        reference, expected = extracted[0]
+        for block, actual in extracted[1:]:
+            for threshold in expected:
+                if actual[threshold] != expected[threshold]:
+                    problems.append(
+                        f"bloat-buckets {threshold} differs: "
+                        f"{location(reference)} vs {location(block)}"
+                    )
+
+names = {block["name"] for block in blocks}
+if problems:
+    print("DRIFT:")
+    for problem in problems:
+        print(f"- {problem}")
+    print(f"Found {len(names)} block names, {len(blocks)} copies.")
+    raise SystemExit(1)
+
+print(
+    f"CLEAN: {len(names)} block names, {len(blocks)} copies; "
+    "parity bodies and bloat-buckets thresholds match."
+)
+```
+
+```bash
+[PYTHON_CMD] graphify-out/.forge_shared_blocks.py
+```
 
 ```bash
 grep -rn "forge:shared-block" skills           # every marker — copies come in pairs

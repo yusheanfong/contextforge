@@ -58,7 +58,7 @@ is kept apart from every subtask's `agent_id` — 5c must never resume one for t
 
 ### 0a. Graph prerequisite — hard-stop
 
-<!-- forge:shared-block graph-hard-stop -->
+<!-- forge:shared-block graph-hard-stop variant:orchestrate -->
 `/forge-orchestrate` is graph-driven. Use the Read tool (or a file check) for `graphify-out/graph.json`
 in the current directory.
 
@@ -73,7 +73,7 @@ Run /forge-contextmap first to build the knowledge graph, then re-run /forge-orc
 
 ### 0b. Resolve the Python interpreter as `[PYTHON_CMD]`
 
-<!-- forge:shared-block python-cmd -->
+<!-- forge:shared-block python-cmd variant:orchestrate -->
 Graphify is normally installed with **uv** or **pipx**, which put it in its own virtualenv. That
 venv's python has `networkx`; your system `python3` almost certainly does not. Resolving the wrong
 one is the single most common way these scripts die. Work down this list and stop at the first
@@ -447,7 +447,7 @@ List `doc/*.md` **once per run** (one glob, cached) so you know what actually ex
 only paths the glob confirmed. Naming a doc the project never scaffolded costs the worker a wasted
 turn on a failed Read.
 
-<!-- forge:shared-block source-doc-map -->
+<!-- forge:shared-block source-doc-map variant:dispatch -->
 - **Always:** `doc/architecture.md`, `doc/solution-structure.md`, `doc/coding-standard.md`, and
   `doc/prd.md` if it exists (small — it's the scope guard for spec compliance)
 - UI/screen/widget/view/component sources → `doc/design-brief.md` + `doc/app-flow.md`
@@ -472,6 +472,7 @@ Assemble the worker prompt from: the subtask **goal** + **success criterion** + 
 (3a) + the doc paths (3b) + these constraints, verbatim. The read gate leads the block — it is a
 blocking precondition, not a footnote, and a worker that skims will still hit it first:
 
+<!-- forge:shared-block minimal-ladder variant:payload -->
 ```
 FIRST — before writing any code, read these. They are the binding constraints for this subtask
 and you have not seen them:
@@ -502,6 +503,7 @@ top-down and stop at the first rung that applies:
 GUARD: the ladder never applies to the tests Phase 4 mandates or to any file needed to satisfy the
 success criterion. Those are always required — never skip them as "YAGNI."
 ```
+<!-- /forge:shared-block minimal-ladder -->
 
 > The ladder above is `forge:shared-block minimal-ladder`, in its **payload copy**, and it has to
 > stay literal text: a worker sees its dispatch payload, never this file, so it can never become a
@@ -631,7 +633,7 @@ Assemble the reviewer payload from:
   read-only **Claude** subagent, because the executor must not grade its own diff.
 - the minimal-code ladder — paste the block below into the payload. A subagent sees only its
   dispatch payload, never this file:
-  <!-- forge:shared-block minimal-ladder -->
+  <!-- forge:shared-block minimal-ladder variant:review -->
   1. Does this need to exist? → shouldn't (YAGNI)
   2. Already in this codebase? → should have reused it
   3. Stdlib does it? → should have used it
