@@ -625,9 +625,10 @@ Assemble the reviewer payload from:
 - the subtask **goal** + **success criterion**
 - **the diff command**, with the right cwd for the dispatch mode (see below) and scoped to the files
   the worker reported changing. Under `[BACKEND] = codex` that scope comes from the git snapshot
-  delta in `references/codex-backend.md` §C5, not from the worker's self-report — everywhere below
-  that says "the files the worker reported", read "the reconciled list". The reviewer itself is
-  unchanged: still a read-only **Claude** subagent, because the executor must not grade its own diff.
+  delta plus C5's separately confirmed ignored paths in `references/codex-backend.md`, not from the
+  worker's self-report — everywhere below that says "the files the worker reported", read "the
+  reconciled list plus its ignored no-diff paths". The reviewer itself is unchanged: still a
+  read-only **Claude** subagent, because the executor must not grade its own diff.
 - the minimal-code ladder — paste the block below into the payload. A subagent sees only its
   dispatch payload, never this file:
   <!-- forge:shared-block minimal-ladder -->
@@ -662,6 +663,7 @@ Assemble the reviewer payload from:
 VERDICT: PASS | FAIL
 FAILURES:    one line each, or "none"
 DELETE-LIST: path:line — reason, or "clean"
+NO-DIFF REVIEWED: comma-separated paths, or "none"
 ```
 
 `FAILURES` lines must name the **concrete offending values**, not just which check failed. 5b.4's
@@ -670,6 +672,21 @@ don't hardcode it" if the reviewer reported the hex. A bare "design check failed
 and if the value is genuinely needed, adding it to the brief is the fix, never hardcoding.
 
 #### Where the reviewer runs `git diff`
+
+**Gitignored paths — every dispatch mode.** In the same checkout the reviewer will inspect, run
+`git check-ignore -q <path>` for every scoped path and read its exit code directly. Branch on exit
+`0` specifically: it means ignored; exit `1` means not ignored; exit `128` is an error, so stop and
+report it rather than dispatching a review with an unverified scope. In worktree mode, use
+`git -C <worktree abs path> check-ignore -q <path>` instead.
+
+When any scoped path is ignored, `git diff -- <path>` returns nothing and a reviewer that trusts it
+can return `VERDICT: PASS` without reviewing that file. Name ignored paths separately in the payload
+as `NO-DIFF PATHS (gitignored)`, exclude them from the diff-only path list, and tell the reviewer to
+read each one directly and apply all four checks to the current whole file. The reviewer must list
+every such path on the return contract's `NO-DIFF REVIEWED` line; that disclosure is not a
+failure. A whole-file review checks the current file, not the change, and the report must not imply
+that a diff was reviewed. If every scoped path is ignored, omit the diff command entirely; never run
+`git diff --` with an empty path list.
 
 **Worktree mode** — the subtask's edits live in its own checkout, and a subagent starts in THIS
 session's cwd, not there. A bare `git diff` would come back empty and the reviewer would return

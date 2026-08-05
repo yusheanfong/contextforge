@@ -563,7 +563,8 @@ After it returns, run the identical command again and take the delta. `--porcela
 than `git diff --name-only` because it also reports untracked files, which a new-file subtask
 produces. Note it can report a whole **directory** (`?? src/__pycache__/`), not only files — match on
 the path prefix, not on exact filenames. The snapshot is a path list, not content: it can report
-which paths changed status, never whether a write completed.
+which paths changed status, never whether a write completed. Also record the moment of dispatch in
+the subtask state; do not create another snapshot artifact for it.
 
 First locate the heading: match a line whose text, after stripping markdown emphasis characters and
 surrounding whitespace, equals `FILES CHANGED:`. A captured dispatch returned:
@@ -585,13 +586,32 @@ it is empty. Thus the captured entry normalizes to
 followed by trailing whitespace normalizes to `index.html`. This normalization applies to the claimed
 list only, not the git delta.
 
-**Two inputs, three outcomes.** Intersect the git delta with Codex's `FILES CHANGED:` list:
+**Two inputs, four outcomes.** Intersect the git delta with Codex's `FILES CHANGED:` list. Before
+reporting a claimed path that is absent from the delta, run:
 
-| In git delta | Claimed by Codex | Outcome |
-|---|---|---|
-| yes | yes | **the authoritative list** — this is what 5b diffs and 5d stages |
-| yes | no | **report, never stage.** Print it in the Phase 6 report as `unclaimed changes` |
-| no | yes | **report.** Usually a sandbox denial or a path outside the writable root |
+```bash
+git check-ignore -q <path>
+```
+
+When execution used `-C`, apply the same `-C <same dir codex exec runs in>` prefix here.
+Read its exit code directly. Branch on exit `0` specifically: `0` means ignored, `1` means not
+ignored, and `128` is an error — report that error instead of classifying the path.
+
+| In git delta | Claimed by Codex | `check-ignore` result | Outcome |
+|---|---|---|---|
+| yes | yes | not needed | **the authoritative list** — this is what 5b diffs and 5d stages |
+| yes | no | not needed | **report, never stage.** Print it in the Phase 6 report as `unclaimed changes` |
+| no | yes | exit `1` | **report.** The path is not ignored; usually this is a sandbox denial or a path outside the writable root |
+| no | yes | exit `0` | **git is blind here.** Confirm the probable write outside git, pass the path to 5b as an ignored no-diff path, and never stage it |
+
+For an ignored path, the cheapest confirmation is a modification time later than the recorded
+dispatch moment. That indicates a write after dispatch began, but cannot prove Codex made it or that
+the bytes differ from the pre-dispatch content; only a content hash taken before and after can prove
+the latter. Do not repurpose `.orchestrate_before_<n>.txt` as either check — it is deliberately only
+a path list.
+
+An ignored path is review-and-report scope only, never staging scope. `git add` would require `-f`;
+silently forcing a gitignored file into the commit is worse than leaving the edit uncommitted.
 
 Neither list alone works. Git alone stages junk: a fixture run showed that a subtask which runs
 `pytest` — which Phase 4 mandates — leaves `src/__pycache__/` and `tests/__pycache__/` in the delta,
