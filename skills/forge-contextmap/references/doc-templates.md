@@ -6,7 +6,7 @@ PROJECT and MIGRATION modes. Conditional rules: `design-brief.md` only if `[HAS_
 
 **File 1: `CLAUDE.md`**
 
-<!-- forge:shared-block source-doc-map — Rule 1's task→doc routing below mirrors
+<!-- forge:shared-block source-doc-map variant:template — Rule 1's task→doc routing below mirrors
      forge-orchestrate/SKILL.md 3b. Keep both in sync. The marker lives outside the template fence
      on purpose: anything inside the fence is copied verbatim into the user's CLAUDE.md. -->
 
@@ -96,6 +96,7 @@ For multi-step tasks, state a brief plan with a verify step per step:
 1. [Step] → verify: [check]
 2. [Step] → verify: [check]
 ```
+<!-- /forge:shared-block source-doc-map -->
 
 Note: rules 1/6/7 reference `design-brief.md` / `backend-schema.md`. When the corresponding doc
 isn't created, drop the *reference*, not the whole line — and never by deleting every line that

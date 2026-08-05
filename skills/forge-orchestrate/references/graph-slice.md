@@ -19,7 +19,7 @@ from pathlib import Path
 import networkx as nx
 from networkx.readwrite import json_graph
 
-# forge:shared-block graph-loader
+# forge:shared-block graph-loader variant:slice
 data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
 G = json_graph.node_link_graph(data, edges='links')
 
@@ -29,6 +29,17 @@ def label_of(n):
     return G.nodes[n].get('label', str(n))
 # /forge:shared-block graph-loader
 
+DOC_SUFFIXES = {'.md', '.mdx', '.qmd', '.skill'}
+DOC_TYPES = {'document', 'paper', 'image'}
+SEED_CAP = 5
+CODE_SEED_SLOTS = 2
+
+def is_doc(n):
+    d = G.nodes[n]
+    s = d.get('source_file')
+    return (d.get('file_type') in DOC_TYPES
+            or (s is not None and Path(s.replace('\\', '/')).suffix.lower() in DOC_SUFFIXES))
+
 # 1) seed nodes: best label-term overlap
 scored = []
 for n, d in G.nodes(data=True):
@@ -37,12 +48,16 @@ for n, d in G.nodes(data=True):
     if s:
         scored.append((s, n))
 scored.sort(reverse=True)
-seeds = [n for _, n in scored[:5]]
+code_seeds = [n for _, n in scored
+              if G.nodes[n].get('source_file') and not is_doc(n)]
+code_seeds = code_seeds[:max(0, min(CODE_SEED_SLOTS, SEED_CAP))]
+seeds = ([n for _, n in scored if n not in code_seeds]
+         [:max(0, SEED_CAP - len(code_seeds))] + code_seeds)
 
 if not seeds:
     print('NO_MATCH'); sys.exit(0)
 
-BFS_THIN = 15   # below this, the BFS found almost nothing — fall back to community
+BFS_THIN = 15   # below this, the BFS found almost nothing - fall back to community
 FILE_CAP = 12   # both tuned on a real graph; see "Why these numbers" below
 
 # 2) BFS neighborhood (depth 2) from seeds, recording hop distance for ranking
@@ -58,7 +73,7 @@ for hop in (1, 2):
     frontier = nxt
 slice_nodes = set(dist)
 
-# 3) community-mates — ONLY as a fallback when the BFS came back thin
+# 3) community-mates - ONLY as a fallback when the BFS came back thin
 if len(slice_nodes) < BFS_THIN:
     seed_comms = {G.nodes[n].get('community') for n in seeds
                   if G.nodes[n].get('community') is not None}
@@ -67,7 +82,7 @@ if len(slice_nodes) < BFS_THIN:
             dist[n] = 3          # ranks below every BFS hop
             slice_nodes.add(n)
 
-# 4) emit — files ranked seed-hosting first, then by hop distance, then capped
+# 4) emit - files ranked seed-hosting first, then by hop distance, then capped
 seed_files = {G.nodes[n].get('source_file') for n in seeds}
 best = {}
 for n in slice_nodes:
@@ -80,7 +95,7 @@ if len(ranked) > FILE_CAP:
     print('  ... +%d more (truncated - ask if you need one)' % (len(ranked) - FILE_CAP))
 print('NODES'); [print(' ', label_of(n)) for n in sorted(slice_nodes, key=label_of)[:25]]
 
-# edges ranked the same way as files — closest to a seed first, or the 15 slots
+# edges ranked the same way as files - closest to a seed first, or the 15 slots
 # fill up with whatever G.edges() happened to yield first
 edges = [(u, v) for u, v in G.edges() if u in slice_nodes and v in slice_nodes]
 edges.sort(key=lambda uv: (min(dist[uv[0]], dist[uv[1]]), max(dist[uv[0]], dist[uv[1]])))
@@ -96,18 +111,27 @@ those nodes never entered the frontier and depth-2 never expanded through them �
 *shrank* the slice below what a plain BFS would have found. Measured on a 1457-node graph: for one
 subtask, BFS alone reached 298 nodes while the shipped algorithm returned 247.
 
-**Why these numbers** — tuned against a real graph (Flask: 1457 nodes, 2465 edges, 102 communities),
-not guessed:
+Document detection deliberately matches S2.5's two-part test: `file_type` alone misses code-typed
+nodes surfaced from markdown, while suffix alone misses unambiguous paper and image nodes.
 
+**Why these numbers** — `FILE_CAP` and `BFS_THIN` were tuned against a real graph (Flask: 1457
+nodes, 2465 edges, 102 communities). The seed constants have separate evidence:
+
+- `SEED_CAP = 5` — names the original five-seed budget; it was not retuned.
+- `CODE_SEED_SLOTS = 2` — a small graph with five query-heavy document nodes, seven connected
+  code-side nodes, and no doc-to-code edge returned all six `src/` paths with one reserved seed.
+  Two is an unmeasured robustness margin for a real graph whose top-scoring code node is a leaf
+  instead of a hub. Like S2.5's all-doc floor, an all-document graph disables the reservation
+  instead of emptying the result, so the original top-five selection stays active.
 - `FILE_CAP = 12` — across six representative subtask phrasings, the seed-hosting and one-hop files
   (the ones that are actually right) numbered 1–9. Twelve covers all of them with headroom, and cuts
-  the worst case from 65 emitted files to 12. Hop-2 is where the noise lives — on this fixture it
+  the worst case from 65 emitted files to 12. Hop-2 is where the noise lives — on Flask it
   contributed 7–54 files per subtask, mostly `examples/` and tutorial code irrelevant to the task.
 - `BFS_THIN = 15` — depth-2 BFS on that graph returned 31–298 nodes, so the fallback never fires on
   a healthy graph. Fifteen marks a genuinely degenerate slice, which is the only case where pulling
   a whole community is better than what BFS found.
 
-Both are plain constants — retune them if your graphs are much smaller or sparser.
+All four are plain constants — retune them if your graphs are much smaller or sparser.
 
 Note the `... ` truncation marker and `%`-formatting are deliberate: plain ASCII and no f-strings,
 per the portability contract.

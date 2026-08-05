@@ -52,8 +52,12 @@ A C1.1 stop needs no cleanup: it fires before the run has created a single artif
    No `AGENTS.md` in the repo root → nothing to do. If there is one, diff it:
 
    ```bash
-   git diff --no-index --ignore-all-space -- CLAUDE.md AGENTS.md
+   git diff --no-index --ignore-all-space -I'graphify:auto' -- CLAUDE.md AGENTS.md
    ```
+
+   `-I` requires Git 2.30 or newer; an older Git errors on the flag. It drops a hunk only when all
+   its changed lines match `graphify:auto`, so a graphify fence marker-name-only difference is
+   silent. Real drift inside a fence keeps the hunk and still warns.
 
    Empty → the shadowing is harmless; continue silently. Non-empty → print the drifted section
    headings and **continue**:
@@ -98,8 +102,10 @@ A killed execute subprocess leaves a half-written working tree that C5 would the
 Planning calls are not reliably the short ones. A `sol`/`high` council-class call over this repo
 **exceeded the 10-minute cap and was killed**; the identical call run detached finished normally. A
 killed planning call is a burnt budget slot (C3 counts it), so run every dispatch — execute *and*
-council — with `run_in_background: true` and read the result file when it lands. Do not give a
-planning call a foreground timeout; there is no timeout value that is both safe and under the cap.
+council — with `run_in_background: true` and read the result file when it lands. Detachment removes
+the tool's 10-minute cap; it does not guarantee the process survives, so C7's killed-mid-run
+recovery is required. Do not give a planning call a foreground timeout; there is no timeout value
+that is both safe and under the cap.
 
 **Never `--ephemeral`** — it skips writing the session file, which kills the resume path in C6 and
 council round 3. **Never `--dangerously-bypass-approvals-and-sandbox`** — `-s` is the whole safety
@@ -278,6 +284,9 @@ is cosmetic and is the operator's own configuration, so do not try to strip it: 
 their content and write the plan in your own words, which 1b.2 already requires. Never paste a
 proposal string straight into the printed decomposition.
 
+The execute path has the same styled-output exposure in its `FILES CHANGED:` output; C5 normalizes it
+before reconciliation.
+
 **Rounds 2–3 — the critique.** `..._critique_schema.json`, unchanged from the audit it replaces:
 
 ```json
@@ -373,8 +382,10 @@ Include, paths not pasted text:
   design.
 - The path `graphify-out/graph.json`, the project's `CLAUDE.md`, and the `doc/*.md` paths that exist.
 - The **task-level** slice's `FILES` list, labelled advisory: it was produced from Claude's choice of
-  key words and is a starting point, not a boundary. `NO_MATCH` → say the graph had no specific match
-  and name the universal docs only.
+  key words and is a starting point, not a boundary. The task-level slice is the degraded case;
+  per-subtask queries are more reliable. Council per-subtask slices remain advisory, and only Phase
+  3a's re-run supplies the execution slice. `NO_MATCH` → say the graph had no specific match and
+  name the universal docs only.
 - These questions, verbatim:
   ```
   Propose your own decomposition of this task. Inspect the repository yourself — the file list
@@ -551,15 +562,70 @@ git -C <same dir codex exec runs in> status --porcelain > graphify-out/.orchestr
 After it returns, run the identical command again and take the delta. `--porcelain` is used rather
 than `git diff --name-only` because it also reports untracked files, which a new-file subtask
 produces. Note it can report a whole **directory** (`?? src/__pycache__/`), not only files — match on
-the path prefix, not on exact filenames.
+the path prefix, not on exact filenames. The snapshot is a path list, not content: it can report
+which paths changed status, never whether a write completed. Also record the moment of dispatch in
+the subtask state; do not create another snapshot artifact for it.
 
-**Two inputs, three outcomes.** Intersect the git delta with Codex's `FILES CHANGED:` list:
+**Normalize Codex's claimed list before comparing.** First locate the heading: match a line whose
+text, after stripping markdown emphasis characters and surrounding whitespace, equals
+`FILES CHANGED:`. A captured dispatch returned:
 
-| In git delta | Claimed by Codex | Outcome |
-|---|---|---|
-| yes | yes | **the authoritative list** — this is what 5b diffs and 5d stages |
-| yes | no | **report, never stage.** Print it in the Phase 6 report as `unclaimed changes` |
-| no | yes | **report.** Usually a sandbox denial or a path outside the writable root |
+```
+**FILES CHANGED:**
+
+- [codex-backend.md](/Users/yushean/Desktop/Contextforge/skills/forge-orchestrate/references/codex-backend.md:281)
+```
+
+Scan forward from the heading. Blank lines are separators: ignore them immediately after the
+heading and between entries. End the list before the first line that begins an ATX markdown heading
+(`#` through `######` followed by whitespace) or matches the `^tokens used` run trailer; neither can
+be a legitimate path. Apply the full normalization below to every other candidate line before
+deciding whether it belongs to the list.
+
+C4 asks for plain paths, but a request is not a contract: the same styled-output exposure C3
+documents for the council's prose fields also applies to the execute path's file list. For each
+candidate line, strip leading and trailing whitespace and a leading markdown list marker (`- `,
+`* `, or one or more decimal digits followed by `. `); the numeric form covers ordered lists because
+their marker changes after the first item. When it is a markdown link, take its target rather than
+its display text; strip surrounding backticks; drop a trailing `:<line>` or
+`:<line>:<column>` suffix; relativize an absolute path to the directory `codex exec` ran in — the
+same directory the snapshot used — so both inputs are relative to the same root by construction;
+then discard it if it is empty. After that pass, a claimed path is a single token: if a nonempty
+normalized value still contains interior whitespace, end the list before that line rather than
+discarding only that line. This stops at closing prose instead of scanning past it and possibly
+ingesting a later one-token sign-off as a path. Its known failure mode is prose between two real
+paths: the later paths are dropped; a per-line discard would preserve them but would not bound
+closing prose. Thus the captured entry normalizes to
+`skills/forge-orchestrate/references/codex-backend.md`, and a line consisting of `` `index.html` ``
+followed by trailing whitespace normalizes to `index.html`. This normalization applies to the claimed
+list only, not the git delta.
+
+**Two inputs, four outcomes.** Intersect the git delta with Codex's `FILES CHANGED:` list. Before
+reporting a claimed path that is absent from the delta, run:
+
+```bash
+git check-ignore -q <path>
+```
+
+When execution used `-C`, apply the same `-C <same dir codex exec runs in>` prefix here.
+Read its exit code directly. Branch on exit `0` specifically: `0` means ignored, `1` means not
+ignored, and `128` is an error — report that error instead of classifying the path.
+
+| In git delta | Claimed by Codex | `check-ignore` result | Outcome |
+|---|---|---|---|
+| yes | yes | not needed | **the authoritative list** — this is what 5b diffs and 5d stages |
+| yes | no | not needed | **report, never stage.** Print it in the Phase 6 report as `unclaimed changes` |
+| no | yes | exit `1` | **report.** The path is not ignored; usually this is a sandbox denial or a path outside the writable root |
+| no | yes | exit `0` | **git is blind here.** Confirm the probable write outside git, pass the path to 5b as an ignored no-diff path, and never stage it |
+
+For an ignored path, the cheapest confirmation is a modification time later than the recorded
+dispatch moment. That indicates a write after dispatch began, but cannot prove Codex made it or that
+the bytes differ from the pre-dispatch content; only a content hash taken before and after can prove
+the latter. Do not repurpose `.orchestrate_before_<n>.txt` as either check — it is deliberately only
+a path list.
+
+An ignored path is review-and-report scope only, never staging scope. `git add` would require `-f`;
+silently forcing a gitignored file into the commit is worse than leaving the edit uncommitted.
 
 Neither list alone works. Git alone stages junk: a fixture run showed that a subtask which runs
 `pytest` — which Phase 4 mandates — leaves `src/__pycache__/` and `tests/__pycache__/` in the delta,
@@ -603,7 +669,10 @@ The retry payload is the failure log alone — the gate output, the reviewer's `
 delete-list. Not the original payload: the session still holds every file it read and every edit it
 made.
 
-Resume prints a new session id; record it, because the next retry resumes from that one.
+**The session id is stable across resumes: keep resuming the id captured at the first dispatch.** The
+wrong rule sends an operator hunting resume output for an id that never appears, then needlessly
+falling back to a full re-dispatch with the whole payload. The direction is harmless — re-resuming
+the original id works — which is why the error survived unnoticed.
 
 If the session id was never captured or resume errors, fall back to a fresh `codex exec` with the
 **full** payload plus the failure log — the same fallback 5c already documents for a dead agent.
@@ -625,6 +694,7 @@ entirely.
 | Empty or unparseable `-o` file after a council round | run died before its final turn | it still counts against the 3 — degrade per C3, never score it `verified` |
 | A council round's JSON parses but has duplicate ids, a dangling `depends_on`, a cycle, or an unrelated `execution_order` | schema validity is not semantic validity | same as unparseable — degraded, and the call is spent (C3) |
 | Round 3 dispatched but `council.round2_session_id` was never captured | the session id was not read off stdout at round 2 | fall back to a fresh `codex exec` carrying round 2's findings in the payload; it is still call 3 |
-| `git status` delta is empty after execute | **check the snapshot cwd first** (C5) — in worktree mode a bare `git status` reads the main checkout and always comes back empty. Otherwise Codex answered without editing, or was killed mid-run | fix the `-C`; if the cwd was right, re-dispatch with the goal restated |
+| `git status` delta is empty after execute | **check the snapshot cwd first** (C5) — in worktree mode a bare `git status` reads the main checkout and always comes back empty. Otherwise no tracked path changed | fix the `-C`; if the cwd was right, confirm any scoped ignored paths per C5, then re-dispatch with the goal restated only if no write was confirmed — unless the dispatch was killed or has no `tokens used` trailer; use the row below |
+| A dispatch was killed mid-run or has no `tokens used` trailer | detachment removes the cap but does not guarantee survival. With a dirty baseline, the status delta is unsound: status reports a path's status, not content, and C5's snapshot is a path list, never a completion record | **This overrides the empty-delta row above.** Baseline clean + delta empty: no tracked path was written; an ignored path may still have been written, so when the subtask scopes ignored paths, confirm them per C5 before treating this as a clean resume. Otherwise resume the session id. Baseline clean + delta non-empty: inspect the subtask's changes; `git checkout -- <path>` is safe for tracked paths because HEAD is this subtask's baseline. Untracked paths in the delta are this subtask's creations: inspect them and leave them unless the user chooses removal; never use `git clean` here. Baseline dirty: **never restore** — inspect every scoped path's diff before resuming, because HEAD would erase earlier subtasks. In worktree mode, use C5's `git -C <worktree abs path> status --porcelain` form when evaluating all three branches. |
 | Reconciled delta contains files from an unrelated subtask | `[NO_COMMIT]`, no moving baseline | expected; 5b's out-of-scope note (single-tree `[NO_COMMIT]`) covers it |
 | `NEEDS_CONTEXT` in the final message | Codex lacked a doc or file | supply it and re-dispatch via C6, same as a Claude worker |

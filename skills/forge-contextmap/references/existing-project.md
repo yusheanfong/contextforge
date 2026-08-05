@@ -18,7 +18,7 @@ There are **two different interpreters** in this skill; do not merge them.
 | Resolved | before graphify exists | after E2 confirms graphify exists |
 
 This step resolves **`[BOOTSTRAP_PY]` only**. It cannot use the `python-cmd` ladder in
-`references/sync.md` S1, because that ladder verifies `import networkx` — which can only pass on an
+[`references/sync.md`](sync.md) S1, because that ladder verifies `import networkx` — which can only pass on an
 interpreter that *already has graphify installed*. Using it here would make E2's install branch
 unreachable on the machine E2 exists to serve.
 
@@ -106,7 +106,10 @@ If `graphify install` fails (command not found), try:
 
 ### Step E2.5: Resolve the Graphify CLI
 
-Follow the `graphify-cli` shared block in `references/sync.md` Step S1.5 — it
+Complete E3's `.graphifyignore` corpus-scope check before resolving the build command, so the
+composition count sees the same files Graphify will build.
+
+Follow the `graphify-cli` shared block in [`references/sync.md`](sync.md) Step S1.5 — it
 probes the installed CLI once and caches `build=` / `update=` commands to
 `graphify-out/.graphify_cli`. Do not hardcode an invocation here; graphify's CLI is verb-based
 (`graphify update <path>`) and its flags differ across versions.
@@ -114,7 +117,7 @@ probes the installed CLI once and caches `build=` / `update=` commands to
 ### Step E2.6: Resolve `[PYTHON_CMD]` (the verified interpreter)
 
 Graphify is now installed, so the `python-cmd` ladder can run. Follow the `python-cmd` shared block
-in `references/sync.md` Step S1 and store the result as `[PYTHON_CMD]`. Every `.forge_*.py` script
+in [`references/sync.md`](sync.md) Step S1 and store the result as `[PYTHON_CMD]`. Every `.forge_*.py` script
 below uses it — **not `[BOOTSTRAP_PY]`**, which is only guaranteed to be ≥ 3.10 and may have no
 networkx.
 
@@ -123,13 +126,13 @@ networkx.
 Three commands, in this order:
 
 1. The `build=` command resolved in E2.5 — full AST extraction.
-2. The prune script from `references/sync.md` Step S2.5 (write it, run it, delete it — do not
+2. The prune script from [`references/sync.md`](sync.md) Step S2.5 (write it, run it, delete it — do not
    duplicate the script here).
-3. **`graphify cluster-only .`** — append **`--no-label`** when no LLM backend is configured (the
-   same condition that put `--code-only` on `build=`). This is what writes `GRAPH_REPORT.md`.
+3. **`graphify cluster-only .`** — append **`--no-label`** when no LLM backend is configured,
+   regardless of which build branch ran. This is what writes `GRAPH_REPORT.md`.
 
 This will take time depending on codebase size. Wait for each to complete. Together they produce:
-- `graphify-out/graph.json` — the knowledge graph, code-only
+- `graphify-out/graph.json` — the knowledge graph
 - `graphify-out/GRAPH_REPORT.md` — human-readable summary
 
 If any step fails, print the error and ask the user to check their Graphify installation.
@@ -139,12 +142,16 @@ If any step fails, print the error and ask the user to check their Graphify inst
 > CLAUDE.md Rule 1 both tell readers to open that file, so without step 3 the very first session
 > after scaffolding hits a missing file.
 >
-> **`graphify update` is NOT a substitute — do not use it here.** It short-circuits on an unchanged
-> graph: `[graphify watch] No code-graph topology changes detected; outputs left untouched.` Straight
-> after a fresh `extract` nothing *has* changed, so it writes no report. It only appears to work on a
-> repo that already contains markdown, because then `update` adds doc nodes, topology changes, and
-> the report gets written as a side effect — which is the contamination this skill exists to prevent.
-> On a pure-code repo it silently does nothing.
+> **On a source-predominant corpus, `graphify update` is NOT a substitute for `extract`.** It
+> short-circuits on an unchanged graph: `[graphify watch] No code-graph topology changes detected;
+> outputs left untouched.` Straight after a fresh `extract` nothing *has* changed, so it writes no
+> report. It only appears to work on a repo that already contains markdown, because then `update`
+> adds doc nodes, topology changes, and the report gets written as a side effect — which is the
+> contamination this skill exists to prevent. On a pure-code repo it silently does nothing.
+> The zero-source documentation branch is the deliberate exception to that contamination concern:
+> with no code graph, documentation is the corpus, `extract --code-only` skips it and writes no
+> graph, and `update` cold-builds it. Step 3 still runs in both branches; neither branch relies on
+> the build command to write `GRAPH_REPORT.md`.
 >
 > **`--no-label` is what keeps `cluster-only` safe.** Bare `cluster-only` runs LLM community naming
 > and stalls on a box with no API key. With `--no-label` it re-clusters locally and leaves
@@ -297,27 +304,27 @@ I'll incorporate your corrections before populating the doc files.
 
 Wait for user response. Apply any corrections to your understanding. Store the corrected feature list as `[FEATURES]`.
 
-**If `[HAS_UI]`:** also ask the design question now (same as `references/new-project.md` N1 Question 4): "Describe the look/vibe you want (or brand colors/fonts if you have them)." Then generate the concrete design system per **`references/design-brief-generation.md`** and get approval. Store as `[DESIGN_SYSTEM]`. If the codebase already has an obvious design system (theme file, tokens), extract from THAT first and present it — don't invent a competing one.
+**If `[HAS_UI]`:** also ask the design question now (same as [`references/new-project.md`](new-project.md) N1 Question 4): "Describe the look/vibe you want (or brand colors/fonts if you have them)." Then generate the concrete design system per **[`references/design-brief-generation.md`](design-brief-generation.md)** and get approval. Store as `[DESIGN_SYSTEM]`. If the codebase already has an obvious design system (theme file, tokens), extract from THAT first and present it — don't invent a competing one.
 
 ### Step E6: Check for Existing Docs
 
 Check if `doc/` folder exists with existing doc files.
 
 - If docs exist AND `CLAUDE.md` has the `<!-- contextforge:format v2 -->` marker → v2 docs already present: preserve all user-owned content, write only into auto-fenced sections, and create any v2 docs that are missing.
-- If docs exist WITHOUT the marker → you should be in MIGRATION MODE (SKILL.md STEP 1 check 3) — read `references/migration.md` and follow it.
+- If docs exist WITHOUT the marker → you should be in MIGRATION MODE (SKILL.md STEP 1 check 3) — read [`references/migration.md`](migration.md) and follow it.
 - If no docs exist, create the full v2 set from scratch (Step E7).
 
 ### Step E7: Create/Update All Doc Files
 
 For each doc file, use the fence format to mark graph-generated content. All content outside fences is either user-provided (preserved) or a placeholder prompt (for new files).
 
-**CLAUDE.md** — create or update. Use the SAME v2 template as `references/doc-templates.md` File 1 (including the `<!-- contextforge:format v2 -->` marker, v2 Doc Navigation, Rules 1–8, and all four Coding Rules blocks), with these differences:
+**CLAUDE.md** — create or update. Use the SAME v2 template as [`references/doc-templates.md`](doc-templates.md) File 1 (including the `<!-- contextforge:format v2 -->` marker, v2 Doc Navigation, Rules 1–8, and all four Coding Rules blocks), with these differences:
 
 - `## Goal` — Ask user: "What's the goal of this project?" if not already known from E5. Use their answer.
 - `## Tech Stack` — inferred from graph + user confirmation.
 - Add this section after Tech Stack. The `### Notes` heading is not optional — it is where any
   hand-written description must live, because fence content is regenerated wholesale on every sync
-  (see `references/fence-format.md`):
+  (see [`references/fence-format.md`](fence-format.md)):
   ```
   ## Key Architecture (from Graphify)
   <!-- graphify:auto start:project:claude-summary -->
@@ -375,7 +382,7 @@ For each doc file, use the fence format to mark graph-generated content. All con
 [FILL IN — user-owned]
 ```
 
-**doc/design-brief.md** — ONLY if `[HAS_UI]`. Same template as `references/doc-templates.md` File 4, filled from `[DESIGN_SYSTEM]`, with the fence populated:
+**doc/design-brief.md** — ONLY if `[HAS_UI]`. Same template as [`references/doc-templates.md`](doc-templates.md) File 4, filled from `[DESIGN_SYSTEM]`, with the fence populated:
 
 ```markdown
 <!-- graphify:auto start:project:design-brief -->
@@ -387,7 +394,7 @@ For each doc file, use the fence format to mark graph-generated content. All con
 <!-- graphify:auto end:project:design-brief -->
 ```
 
-**doc/backend-schema.md** — ONLY if `[HAS_BACKEND]`. Same template as `references/doc-templates.md` File 5, with the fence populated:
+**doc/backend-schema.md** — ONLY if `[HAS_BACKEND]`. Same template as [`references/doc-templates.md`](doc-templates.md) File 5, with the fence populated:
 
 ```markdown
 <!-- graphify:auto start:project:backend-schema -->
@@ -531,18 +538,18 @@ For each doc file, use the fence format to mark graph-generated content. All con
 [FILL IN — user-owned]
 ```
 
-If `doc/task-list.md` does not exist, create it in the engineering-plan format (see the task-list format in `references/doc-templates.md` — Goal, "How to work this list", `### Task N.M` blocks with `done` / `Depends on` / `Builds` / `Acceptance criteria`), with Phase 1 inferred from the codebase state.
+If `doc/task-list.md` does not exist, create it in the engineering-plan format (see the task-list format in [`references/doc-templates.md`](doc-templates.md) — Goal, "How to work this list", `### Task N.M` blocks with `done` / `Depends on` / `Builds` / `Acceptance criteria`), with Phase 1 inferred from the codebase state.
 
 If `doc/task-list.md` already exists, `/forge-contextmap` never rewrites its content — it's
 user-authored. (Note: `/forge-orchestrate` is the one exception — on completion it ticks a task's
 `[ ]` → `[x]`, or appends a `[x]` entry under `## Completed (orchestrated)` when the shipped feature
 wasn't on the list. That is status bookkeeping, not a contextmap rewrite.)
 
-Create `doc/changelog.txt`, `doc/progress.txt` only if they don't exist (templates in `references/doc-templates.md`, Files 12–13).
+Create `doc/changelog.txt`, `doc/progress.txt` only if they don't exist (templates in [`references/doc-templates.md`](doc-templates.md), Files 12–13).
 
 ### Step E8: Install Post-Commit Hook
 
-Same as Step N4 in `references/new-project.md`.
+Same as Step N4 in [`references/new-project.md`](new-project.md).
 
 ### Step E9: Confirm
 

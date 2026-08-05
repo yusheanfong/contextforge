@@ -10,7 +10,7 @@
 
 ### Step S1: Resolve the Python Interpreter
 
-<!-- forge:shared-block python-cmd -->
+<!-- forge:shared-block python-cmd variant:contextmap -->
 Graphify is normally installed with **uv** or **pipx**, which put it in its own virtualenv. That
 venv's python has `networkx`; your system `python3` almost certainly does not. Resolving the wrong
 one is the single most common way these scripts die. Work down this list and stop at the first
@@ -68,16 +68,24 @@ versions. Never hardcode an invocation — resolve it once, then reuse.
    graphify --version
    ```
    If the command is not found, graphify is not installed — print the install guidance from
-   `references/existing-project.md` Step E2 and STOP. Call the resolved command `[GRAPHIFY]`.
+   [`references/existing-project.md`](existing-project.md) Step E2 and STOP. Call the resolved command `[GRAPHIFY]`.
 3. Read the command list — it is the authority, not this file:
    ```bash
    graphify --help
    ```
    Confirm three things and note what you find:
-   - **The build verb.** There is **no bare `graphify <path>` form.** Building is
-     `graphify extract <path>` — "headless full extraction (AST + semantic LLM)". Append
-     **`--code-only`** when no LLM API key is configured: it indexes code by local AST with no API
-     call, which is also the right choice for a code-only repo.
+   - **The build verb, selected by corpus composition.** Count files in the `.graphifyignore`-scoped
+     corpus by extension before the first build, using the same case-insensitive shell-level counts
+     as SKILL.md Step 1. Documentation is
+     `.md`, `.mdx`, `.qmd`, `.skill` — the suffix half of S2.5's `is_doc` test; `DOC_TYPES` cannot
+     exist until after extraction. The source suffixes are the source list from SKILL.md Step 1.
+     When the source count is zero, use `graphify update <path>`, which cold-builds AST-extractable
+     documents without an LLM backend. The boundary is zero rather than a majority because
+     `extract` already produces a graph when any detected source file is present, while S2.5 would
+     strip the doc nodes added by `update` from that mixed graph anyway. Otherwise use `graphify
+     extract <path>` — "headless full extraction (AST + semantic LLM)" — and append
+     **`--code-only`** when no LLM API key is configured; it indexes real source by local AST with no
+     API call. There is **no bare `graphify <path>` form.**
    - **The shrink-override flag on `update`.** `graphify update` is incremental and **refuses to
      overwrite `graph.json` when the rebuild has fewer nodes than the existing graph.** As of 0.9.26
      the override is `--force` (`overwrite graph.json even if the rebuild has fewer nodes`; env var
@@ -87,9 +95,11 @@ versions. Never hardcode an invocation — resolve it once, then reuse.
 4. Write `graphify-out/.graphify_cli` with the **Write tool** (create `graphify-out/` first if the
    directory does not exist — in EXISTING PROJECT MODE it will not until graphify's first run):
    ```
-   build=[GRAPHIFY] extract . <--code-only if no LLM backend is configured>
+   build=[GRAPHIFY] update .                                      <no source files>
+   build=[GRAPHIFY] extract . <--code-only if no LLM backend is configured>  <one or more source files>
    update=[GRAPHIFY] update . <force-flag if step 3 found one>
    ```
+   Write exactly one `build=` line: the branch selected from the corpus counts.
 5. Use those two commands verbatim wherever this skill needs to build or update the graph.
 
 *Why probe instead of hardcode:* `python -m graphify . --update` — the invocation this skill used to
@@ -203,9 +213,12 @@ if ratio > MAX_DROP_RATIO:
 # Doc drop is accounted SEPARATELY from stale — folding it into MAX_DROP_RATIO would
 # trip the refusal on a doc-heavy repo, which is not the failure that guard exists for.
 doc_ids = {n["id"] for n in nodes if is_doc(n)}
-if doc_ids and not (total - len(stale_ids | doc_ids)):
-    # Markdown-only corpus: dropping every node would write ten empty fences.
-    print(f"Corpus is documentation — doc filter disabled ({len(doc_ids)} doc node(s) kept).")
+if doc_ids and len(doc_ids) * 2 > total:
+    # Mostly-prose corpus: dropping its majority content would empty its doc fences.
+    print(
+        f"Doc filter disabled: documentation is the majority ({len(doc_ids)}/{total} nodes); "
+        f"{len(doc_ids - stale_ids)} non-stale doc node(s) kept."
+    )
     doc_ids = set()
 
 drop = stale_ids | doc_ids
@@ -245,8 +258,10 @@ Five guards are load-bearing — do not simplify them away:
   semantic pass mints `file_type="code"` nodes for symbols it surfaced from *inside* a `.md` file. A
   `file_type == 'code'` test alone passes those straight through. Suffix comparison is lowercased
   because macOS is case-insensitive and graphify itself dispatches on `suffix.lower()`.
-- **The all-doc floor.** If dropping docs would empty the graph, the filter disables itself. A
-  markdown-only repo would otherwise get ten docs written with empty fences.
+- **The majority-doc floor.** If doc-derived nodes are more than half of all graph nodes, the filter
+  disables itself. Total nodes are the denominator because this classifies the graph consumed by
+  the fences; incidental code nodes must not make a prose corpus discard its content. The printed
+  kept count excludes stale docs, which the stale-node path still handles separately.
 
 **Expect the node count to oscillate, and do not "fix" it.** The post-commit hook runs
 `graphify update`, which re-adds doc nodes; the next sync drops them again. The oscillation lives
@@ -276,7 +291,7 @@ Delete `graphify-out/.forge_prune.py` when done.
 ### Step S3: Parse Updated Graph
 
 Re-parse the pruned `graphify-out/graph.json` using the **same `.forge_parse.py` script** as Step E4
-in `references/existing-project.md` — write it, run it, read its output, delete it. **Do not open
+in [`references/existing-project.md`](existing-project.md) — write it, run it, read its output, delete it. **Do not open
 `graph.json` with the Read tool**; it is ~424 KB on a small repo.
 
 ### Step S3.5: Diff Graph and Draft Changelog

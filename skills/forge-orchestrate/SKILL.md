@@ -46,11 +46,11 @@ is kept apart from every subtask's `agent_id` — 5c must never resume one for t
 
 | File | Read when |
 |---|---|
-| `references/graph-slice.md` | Phase 3a — always (the slice script lives there) |
-| `references/codex-backend.md` | `[BACKEND] = codex` — read right after 0d, before the council |
-| `references/task-list-formats.md` | `doc/task-list.md` exists (Phase 0d + Phase 6) |
-| `references/worktree-mode.md` | a batch has 2+ independent subtasks AND `[NO_COMMIT]` is false |
-| `references/release-readiness.md` | Phase 6 |
+| [`references/graph-slice.md`](references/graph-slice.md) | Phase 3a — always (the slice script lives there) |
+| [`references/codex-backend.md`](references/codex-backend.md) | `[BACKEND] = codex` — read right after 0d, before the council |
+| [`references/task-list-formats.md`](references/task-list-formats.md) | `doc/task-list.md` exists (Phase 0d + Phase 6) |
+| [`references/worktree-mode.md`](references/worktree-mode.md) | a batch has 2+ independent subtasks AND `[NO_COMMIT]` is false |
+| [`references/release-readiness.md`](references/release-readiness.md) | Phase 6 |
 
 ---
 
@@ -58,7 +58,7 @@ is kept apart from every subtask's `agent_id` — 5c must never resume one for t
 
 ### 0a. Graph prerequisite — hard-stop
 
-<!-- forge:shared-block graph-hard-stop -->
+<!-- forge:shared-block graph-hard-stop variant:orchestrate -->
 `/forge-orchestrate` is graph-driven. Use the Read tool (or a file check) for `graphify-out/graph.json`
 in the current directory.
 
@@ -73,7 +73,7 @@ Run /forge-contextmap first to build the knowledge graph, then re-run /forge-orc
 
 ### 0b. Resolve the Python interpreter as `[PYTHON_CMD]`
 
-<!-- forge:shared-block python-cmd -->
+<!-- forge:shared-block python-cmd variant:orchestrate -->
 Graphify is normally installed with **uv** or **pipx**, which put it in its own virtualenv. That
 venv's python has `networkx`; your system `python3` almost certainly does not. Resolving the wrong
 one is the single most common way these scripts die. Work down this list and stop at the first
@@ -138,7 +138,7 @@ First, parse the **backend subcommand**: if `$ARGUMENTS` starts with the bare wo
 `[BACKEND] = codex` and strip that word. Otherwise `[BACKEND] = claude`. It is a subcommand, not a
 flag — same shape as `/forge-contextmap sync` — and it must be parsed first so that both
 `/forge-orchestrate codex --no-commit <feature>` and `/forge-orchestrate codex doc/diagnosis-x.md`
-resolve correctly. Under `[BACKEND] = codex`, read `references/codex-backend.md` now and run its C1
+resolve correctly. Under `[BACKEND] = codex`, read [`references/codex-backend.md`](references/codex-backend.md) now and run its C1
 preflight before the council; a missing `codex` binary stops the run before anything is written, and
 its other checks warn and continue.
 
@@ -167,7 +167,7 @@ Then resolve the request, in this order:
 2. **Explicit request** — otherwise, if `$ARGUMENTS` (flags stripped) is non-empty, that is the
    request.
 3. **Next task from the plan** — if `$ARGUMENTS` is empty:
-   - If `doc/task-list.md` exists → read `references/task-list-formats.md` and follow its
+   - If `doc/task-list.md` exists → read [`references/task-list-formats.md`](references/task-list-formats.md) and follow its
      *Phase 0d* section to pick the next eligible task. Wait for confirmation.
    - Otherwise ask: `"What feature should I orchestrate?"` and wait.
 
@@ -253,14 +253,14 @@ gate fails 3×.
 ### 1b. Planning council *(codex backend only — skip entirely when `[BACKEND] = claude`)*
 
 Before any code is written, Claude and Codex plan as a council. Follow
-`references/codex-backend.md` §C3 — it carries both schemas, the invocation shapes, the payloads and
+[`references/codex-backend.md`](references/codex-backend.md) §C3 — it carries both schemas, the invocation shapes, the payloads and
 the budget rules. **At most 3 Codex calls, all read-only.** Every dispatch is background (§C2); a
 planning call can exceed a 10-minute foreground cap, and a killed call still spends its slot.
 
 1. **1b.0 — set up.** Pick the `run_id` and give this run its own directory,
    `graphify-out/.orchestrate_council_<run_id>/` — never purge another run's, which may be live
    (C3). Write both schemas there. Produce a **task-level** graph slice: read
-   `references/graph-slice.md` and run its script with `[TASK]`'s key words.
+   [`references/graph-slice.md`](references/graph-slice.md) and run its script with `[TASK]`'s key words.
 2. **1b.1 — call 1, Codex's independent proposal.** Dispatch before writing any decomposition of your
    own. The payload carries the task, its criteria, `[TASK_FEATURE]`, the diagnosis facts
    (`[BLAST_RADIUS]`, `[RULED_OUT]`), any assumption 0e resolved, and the graph/doc/`CLAUDE.md`
@@ -270,7 +270,7 @@ planning call can exceed a 10-minute foreground cap, and a killed call still spe
    proposal as evidence; never adopt it wholesale and never discard it unread.
 4. **1b.3 — synthesize and print.** Reconcile the two against live repository evidence, record every
    material disagreement and why you chose as you did, then print the plan block above.
-5. **1b.4 — per-subtask slices** for the synthesized subtasks (`references/graph-slice.md` again).
+5. **1b.4 — per-subtask slices** for the synthesized subtasks ([`references/graph-slice.md`](references/graph-slice.md) again).
    These are **advisory planning inputs**: Phase 3a re-runs them after the branch exists.
 6. **1b.5 — call 2, critique.** Fresh session. `verified` → stop early at 2 calls, go to Phase 2.
    `flawed` → 1b.6.
@@ -423,7 +423,7 @@ worker will see — it never inherits this session's history.
 
 ### 3a. Graph slice
 
-Read `references/graph-slice.md` and follow it exactly. It writes the slice script once, runs it per
+Read [`references/graph-slice.md`](references/graph-slice.md) and follow it exactly. It writes the slice script once, runs it per
 subtask with the subtask's key terms, and returns the touched source files + node labels + key
 edges. `NO_MATCH` means the graph has no node for these terms — fall back to the universal docs only
 (3b) and tell the worker the graph had no specific match.
@@ -447,7 +447,7 @@ List `doc/*.md` **once per run** (one glob, cached) so you know what actually ex
 only paths the glob confirmed. Naming a doc the project never scaffolded costs the worker a wasted
 turn on a failed Read.
 
-<!-- forge:shared-block source-doc-map -->
+<!-- forge:shared-block source-doc-map variant:dispatch -->
 - **Always:** `doc/architecture.md`, `doc/solution-structure.md`, `doc/coding-standard.md`, and
   `doc/prd.md` if it exists (small — it's the scope guard for spec compliance)
 - UI/screen/widget/view/component sources → `doc/design-brief.md` + `doc/app-flow.md`
@@ -472,6 +472,7 @@ Assemble the worker prompt from: the subtask **goal** + **success criterion** + 
 (3a) + the doc paths (3b) + these constraints, verbatim. The read gate leads the block — it is a
 blocking precondition, not a footnote, and a worker that skims will still hit it first:
 
+<!-- forge:shared-block minimal-ladder variant:payload -->
 ```
 FIRST — before writing any code, read these. They are the binding constraints for this subtask
 and you have not seen them:
@@ -502,6 +503,7 @@ top-down and stop at the first rung that applies:
 GUARD: the ladder never applies to the tests Phase 4 mandates or to any file needed to satisfy the
 success criterion. Those are always required — never skip them as "YAGNI."
 ```
+<!-- /forge:shared-block minimal-ladder -->
 
 > The ladder above is `forge:shared-block minimal-ladder`, in its **payload copy**, and it has to
 > stay literal text: a worker sees its dispatch payload, never this file, so it can never become a
@@ -523,7 +525,7 @@ the diagnosis — do not re-investigate: [list]."
 ## PHASE 4: Execution *(Worker = Engineer agent)*
 
 **If `[BACKEND] = codex`**, the payload assembled in Phase 3 is used verbatim — that reuse is the
-point — but it goes to `codex exec` instead of the Agent tool. Follow `references/codex-backend.md`
+point — but it goes to `codex exec` instead of the Agent tool. Follow [`references/codex-backend.md`](references/codex-backend.md)
 §C2, §C4 and §C5 for dispatch, and ignore only the Agent-tool paragraph and the model-selection
 paragraph below. The dispatch-mode section and everything from Phase 5 on still apply.
 
@@ -546,7 +548,7 @@ applies to both dispatch modes below. Under `[BACKEND] = codex`, `agent_id` hold
 Decide per batch of sibling subtasks:
 
 - **Worktree mode** — a batch has **2+ independent (parallel) subtasks** AND `[NO_COMMIT]` is false.
-  Read `references/worktree-mode.md` and follow it for dispatch, commit (5d), merge-back (5e), and
+  Read [`references/worktree-mode.md`](references/worktree-mode.md) and follow it for dispatch, commit (5d), merge-back (5e), and
   Phase 6 cleanup. This is the preferred path for real parallelism.
 - **Single-tree mode** — a lone subtask, a sequence of dependent subtasks, or `[NO_COMMIT]` (no
   branches → no worktrees). Workers edit the current checkout directly. Everything you need is
@@ -625,12 +627,13 @@ Assemble the reviewer payload from:
 - the subtask **goal** + **success criterion**
 - **the diff command**, with the right cwd for the dispatch mode (see below) and scoped to the files
   the worker reported changing. Under `[BACKEND] = codex` that scope comes from the git snapshot
-  delta in `references/codex-backend.md` §C5, not from the worker's self-report — everywhere below
-  that says "the files the worker reported", read "the reconciled list". The reviewer itself is
-  unchanged: still a read-only **Claude** subagent, because the executor must not grade its own diff.
+  delta plus C5's separately confirmed ignored paths in [`references/codex-backend.md`](references/codex-backend.md), not from the
+  worker's self-report — everywhere below that says "the files the worker reported", read "the
+  reconciled list plus its ignored no-diff paths". The reviewer itself is unchanged: still a
+  read-only **Claude** subagent, because the executor must not grade its own diff.
 - the minimal-code ladder — paste the block below into the payload. A subagent sees only its
   dispatch payload, never this file:
-  <!-- forge:shared-block minimal-ladder -->
+  <!-- forge:shared-block minimal-ladder variant:review -->
   1. Does this need to exist? → shouldn't (YAGNI)
   2. Already in this codebase? → should have reused it
   3. Stdlib does it? → should have used it
@@ -662,6 +665,7 @@ Assemble the reviewer payload from:
 VERDICT: PASS | FAIL
 FAILURES:    one line each, or "none"
 DELETE-LIST: path:line — reason, or "clean"
+NO-DIFF REVIEWED: comma-separated paths, or "none"
 ```
 
 `FAILURES` lines must name the **concrete offending values**, not just which check failed. 5b.4's
@@ -670,6 +674,21 @@ don't hardcode it" if the reviewer reported the hex. A bare "design check failed
 and if the value is genuinely needed, adding it to the brief is the fix, never hardcoding.
 
 #### Where the reviewer runs `git diff`
+
+**Gitignored paths — every dispatch mode.** In the same checkout the reviewer will inspect, run
+`git check-ignore -q <path>` for every scoped path and read its exit code directly. Branch on exit
+`0` specifically: it means ignored; exit `1` means not ignored; exit `128` is an error, so stop and
+report it rather than dispatching a review with an unverified scope. In worktree mode, use
+`git -C <worktree abs path> check-ignore -q <path>` instead.
+
+When any scoped path is ignored, `git diff -- <path>` returns nothing and a reviewer that trusts it
+can return `VERDICT: PASS` without reviewing that file. Name ignored paths separately in the payload
+as `NO-DIFF PATHS (gitignored)`, exclude them from the diff-only path list, and tell the reviewer to
+read each one directly and apply all four checks to the current whole file. The reviewer must list
+every such path on the return contract's `NO-DIFF REVIEWED` line; that disclosure is not a
+failure. A whole-file review checks the current file, not the change, and the report must not imply
+that a diff was reviewed. If every scoped path is ignored, omit the diff command entirely; never run
+`git diff --` with an empty path list.
 
 **Worktree mode** — the subtask's edits live in its own checkout, and a subagent starts in THIS
 session's cwd, not there. A bare `git diff` would come back empty and the reviewer would return
@@ -713,7 +732,7 @@ payload. Spawn a fresh `Agent` **only** if that agent is gone; that path re-send
 and the worker has to re-read everything it already read.
 
 Under `[BACKEND] = codex`, "resume" means `codex exec` with the session id — see
-`references/codex-backend.md` §C6 for the exact argument order (`-s` and `-C` go **before** the
+[`references/codex-backend.md`](references/codex-backend.md) §C6 for the exact argument order (`-s` and `-C` go **before** the
 `resume` subcommand, which rejects them) and the fallback for a session that cannot be resumed. It is
 never `SendMessage`. Resume the subtask's `agent_id`, never `council.round2_session_id` — that one is
 a read-only planning session.
@@ -735,14 +754,14 @@ Handle worker statuses:
 **If `[NO_COMMIT]` is true, skip committing entirely** — just mark the subtask complete and leave
 its changes in the working tree.
 
-**Worktree mode:** follow `references/worktree-mode.md` (5d + 5e).
+**Worktree mode:** follow [`references/worktree-mode.md`](references/worktree-mode.md) (5d + 5e).
 
 **Single-tree mode**: the MAIN session commits, and **commits are serialized — never concurrent**:
 
 1. Process passing subtasks **one at a time**, in completion order. Two `git commit`s never run at
    once (the working tree + index are shared mutable state).
 2. Stage **only the files that THIS subtask's worker reported changing** — never `git add -A`.
-   Under `[BACKEND] = codex` that is the reconciled list from `references/codex-backend.md` §C5,
+   Under `[BACKEND] = codex` that is the reconciled list from [`references/codex-backend.md`](references/codex-backend.md) §C5,
    which is also why `graphify-out/` scratch files never reach the index:
    ```bash
    git add [exact files this worker reported]
@@ -771,9 +790,9 @@ When all subtasks are complete:
 3. Append to `doc/changelog.txt` (`Date | Change | Description`, matching contextmap's format).
    Steps 2–3 write test results into files, so 5a's rule binds here: the counts you write are the
    ones 5a's own command printed, never a worker's or a reviewer's report of them.
-4. If `doc/task-list.md` exists → read `references/task-list-formats.md` and follow its *Phase 6*
+4. If `doc/task-list.md` exists → read [`references/task-list-formats.md`](references/task-list-formats.md) and follow its *Phase 6*
    section to tick what the gates actually verified. Skip silently if the file does not exist.
-5. **Generate the CD release-readiness report** — read `references/release-readiness.md` and write
+5. **Generate the CD release-readiness report** — read [`references/release-readiness.md`](references/release-readiness.md) and write
    `doc/release-readiness.md` as it specifies.
 6. Print the final report (under `[NO_COMMIT]`, replace the Branch/Commits block with
    `Mode: --no-commit — changes left in working tree for you to review and commit`):
@@ -841,7 +860,7 @@ session and owns its own files.
   needs. Deleting them there turns a question into a restart.
 - **A C1.1 preflight stop needs no cleanup at all** — it fires before the run has written anything.
 
-**Worktree mode:** follow the cleanup section of `references/worktree-mode.md`. Note it does not
+**Worktree mode:** follow the cleanup section of [`references/worktree-mode.md`](references/worktree-mode.md). Note it does not
 cover the exits above: a gate or secrets failure after Phase 4 leaves a worktree holding uncommitted
 work, and that must be **reported and left in place**, never silently removed.
 
