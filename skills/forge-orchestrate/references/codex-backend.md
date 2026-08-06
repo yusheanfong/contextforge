@@ -214,6 +214,9 @@ Pick a short `run_id` at 1b.0 (a timestamp is fine) and give this run **its own 
 | `result.json` | 1b.3 | the call's `-o` result |
 | `result.log` | 1b.3 | the dispatch's stdout |
 
+Every path above is **inside** that directory, not a `.orchestrate_council_<run_id>_*` sibling beside
+it — 6z deletes the directory, so a file written next to it would survive cleanup.
+
 The directory is not decoration. Cleanup removes **only this run's** directory (SKILL.md 6z). Never
 delete by a bare `.orchestrate_*` glob and never "purge stale council scratch": a second
 `/forge-orchestrate` may be mid-council in another session, and without a lock you cannot tell its
@@ -224,7 +227,7 @@ live payloads from a dead run's leftovers. Own your directory; leave every other
 It goes in before the call. Every field is `required` and `additionalProperties` is `false` — that
 strictness is the shape known to work with `--output-schema`, so keep it on any field you add.
 
-`..._council_schema.json`:
+`graphify-out/.orchestrate_council_<run_id>/council_schema.json`:
 
 ```json
 {
@@ -313,9 +316,9 @@ codex exec \
   -m gpt-5.6-sol \
   -c 'model_reasoning_effort="high"' \
   -s read-only \
-  --output-schema graphify-out/.orchestrate_council_<run_id>_council_schema.json \
-  -o graphify-out/.orchestrate_council_<run_id>_result.json \
-  - < graphify-out/.orchestrate_council_<run_id>_payload.txt
+  --output-schema graphify-out/.orchestrate_council_<run_id>/council_schema.json \
+  -o graphify-out/.orchestrate_council_<run_id>/result.json \
+  - < graphify-out/.orchestrate_council_<run_id>/payload.txt
 ```
 
 **`-s read-only` does not mean "cannot run tests".** It restricts filesystem writes by the commands
@@ -386,9 +389,8 @@ Include, paths not pasted text:
 
 ### The budget — 1 call, hard
 
-`council.calls_used` increments on the dispatch whether or not it returns anything usable. There is
-no retry: a wasted call is spent, and there is no second `codex exec` in Phase 1b. An unbounded
-planning loop burns both quotas.
+The dispatch spends the budget whether or not it returns anything usable. There is no retry and no
+second `codex exec` in Phase 1b — an unbounded planning loop burns both quotas.
 
 **Degraded.** A missing, empty, unparseable, or semantically invalid `-o` file costs the call and is
 never retried. The decomposition was never critiqued, so the run is **unresolved** — report it as

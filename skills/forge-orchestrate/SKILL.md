@@ -38,7 +38,7 @@ Synthesis = final report + release-readiness.
 `slice` = the key words its graph slice was produced from, so a stale slice is visible after a
 revision), `gate_results`, `files_changed`, `commits[]`, `all_gates_pass`.
 
-Under `[BACKEND] = codex`, also `council`: `run_id`, `calls_used`, `verdict`, `unresolved[]`. The
+Under `[BACKEND] = codex`, also `council`: `run_id`, `verdict`, `unresolved[]`. The
 council's single call is never resumed, so it holds no session id — every stored session id belongs
 to a subtask's `agent_id`.
 
