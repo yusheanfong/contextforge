@@ -1,14 +1,14 @@
 # Codex backend — planning council + execution via `codex exec`
 
 Read this only when `[BACKEND] = codex`. It replaces Phase 4's Agent-tool dispatch with the `codex`
-CLI and replaces Phase 1 with the planning council (§C3). Everything else in `SKILL.md` — the graph
+CLI and extends Phase 1 with the planning council (§C3). Everything else in `SKILL.md` — the graph
 slice, the doc slice, the 3c payload, the gate runner, the 5b reviewer, the commit policy — is used
 unchanged.
 
-**The split:** Codex proposes a plan independently, Claude synthesizes, Codex critiques the
-synthesis, Claude decides. Then Codex implements and Claude reviews. Claude is the coordinator,
-synthesizer, reviewer and final decision-maker throughout; Codex supplies a second independent
-judgment at planning time and does the implementation. The 5b reviewer stays a Claude subagent on
+**The split:** Claude decomposes, one Codex call critiques that decomposition and returns its own cut
+of the task, Claude decides. Then Codex implements and Claude reviews. Claude is the coordinator,
+synthesizer, reviewer and final decision-maker throughout; Codex supplies a second judgment at
+planning time and does the implementation. The 5b reviewer stays a Claude subagent on
 purpose — an executor grading its own diff is the weakest possible critic.
 
 Behaviour below was verified against `codex-cli 0.146.0`.
@@ -99,16 +99,16 @@ codex exec [flags] - < graphify-out/.orchestrate_payload_<n>.txt
 A killed execute subprocess leaves a half-written working tree that C5 would then hand to `git add`
 — worse than a clean failure.
 
-Planning calls are not reliably the short ones. A `sol`/`high` council-class call over this repo
+The planning call is not reliably the short one. A `sol`/`high` council-class call over this repo
 **exceeded the 10-minute cap and was killed**; the identical call run detached finished normally. A
-killed planning call is a burnt budget slot (C3 counts it), so run every dispatch — execute *and*
+killed planning call is the whole budget (C3 counts it), so run every dispatch — execute *and*
 council — with `run_in_background: true` and read the result file when it lands. Detachment removes
 the tool's 10-minute cap; it does not guarantee the process survives, so C7's killed-mid-run
 recovery is required. Do not give a planning call a foreground timeout; there is no timeout value
 that is both safe and under the cap.
 
-**Never `--ephemeral`** — it skips writing the session file, which kills the resume path in C6 and
-council round 3. **Never `--dangerously-bypass-approvals-and-sandbox`** — `-s` is the whole safety
+**Never `--ephemeral`** — it skips writing the session file, which kills the resume path in C6.
+**Never `--dangerously-bypass-approvals-and-sandbox`** — `-s` is the whole safety
 story here.
 
 **Capture the session id — and note that background dispatch changes where you read it.** `codex
@@ -119,21 +119,19 @@ come back to you, so **redirect it to a log file and read the id out of the log*
 codex exec [flags] - < <payload> > <log> 2>&1
 ```
 
-Without this the id is never captured, and every path that depends on it silently degrades: C6 falls
-back to a fresh dispatch with the full payload, and council round 3 falls back to a fresh session
-that has forgotten its own findings. Both fallbacks work, so nothing errors — which is exactly why
-this is easy to miss.
+Without this the id is never captured, and the path that depends on it silently degrades: C6 falls
+back to a fresh dispatch with the full payload. That fallback works, so nothing errors — which is
+exactly why this is easy to miss.
 
-An execute dispatch stores the id in the subtask's existing `agent_id` slot for C6; council round 2
-stores it in `council.round2_session_id` for round 3. Keep the two apart — they are different
-sessions with different sandboxes.
+An execute dispatch stores the id in the subtask's existing `agent_id` slot for C6. The council's
+call needs no id: nothing resumes it.
 
 **Never detect completion by grepping the log for text that appears in the payload.** `codex exec`
 echoes the whole prompt to stdout before the turn starts, so a `FILES CHANGED` grep matches the
 instruction that *asked* for the list, not the answer, and reports a finished run seconds after
 dispatch. Any sentinel drawn from the payload self-matches this way. Wait on the background
 dispatch's own exit; if you must poll the log, match the run trailer `^tokens used`, which only the
-finished turn writes. For a council round the `-o` file appearing is the same signal.
+finished turn writes. For the council call the `-o` file appearing is the same signal.
 
 **Worktree mode** — pass `-C <worktree abs path>` so Codex's working root is that checkout.
 
@@ -146,7 +144,7 @@ in Phase 4, which applies to Agent-tool workers only.
 
 | Phase | Model | Why |
 |---|---|---|
-| **C3 council** | `gpt-5.6-sol`, `model_reasoning_effort="high"` | Every planning call — the independent proposal and both critiques. Planning is where a cheap pass fails silently: it returns criterion-wording nits instead of "this subtask is architecturally wrong for this codebase". It is also the cheap phase — read-only, ~2 minutes a call, and one caught plan flaw saves a whole execute round. |
+| **C3 council** | `gpt-5.6-sol`, `model_reasoning_effort="high"` | The one planning call — it both critiques and counter-proposes. Planning is where a cheap pass fails silently: it returns criterion-wording nits instead of "this subtask is architecturally wrong for this codebase". It is also the cheap phase — read-only, ~2 minutes a call, and one caught plan flaw saves a whole execute round. |
 | **C4 execute** | `gpt-5.6-terra` | Default. Mini-like tier, right for mechanical 1–2 file edits against a clear spec. |
 | **C4 execute** | `gpt-5.6-sol` | For a subtask involving multi-file integration or design judgment — the same distinction Phase 4 draws for Claude workers. |
 
@@ -157,7 +155,7 @@ Tier descriptions are the CLI's own: `sol` is *"flagship … for hardest quality
 reasoning workflows"*, `terra` is *"mini-like … for balanced cost, latency, and quality"*.
 
 The council row's model choice is a measured result, not a preference. Same fixture, same schema,
-same prompt, on the audit this council's critique round grew out of: `terra`
+same prompt, on the audit this council's critique grew out of: `terra`
 returned criterion-wording nits, while `sol` caught that the plan's central term was undefined
 ("valid code" with no codes or rates specified), cross-checked the plan against the project
 `CLAUDE.md`'s two-decimal rounding rule, and read the source to find that `checkout()` returns a dict
@@ -187,22 +185,23 @@ report it and stop rather than retrying: no `-m` value will fix an account that 
 
 ## C3. Planning council — Phase 1b
 
-Three Codex calls, hard cap, all read-only. Round 1 proposes a decomposition from the original task
-**without seeing Claude's**; round 2 critiques Claude's synthesis of the two; round 3 verifies the
-revision. Stop early the moment round 2 returns `verified` — that is the common case and it costs
-two calls.
+**One Codex call, hard cap, read-only.** Claude decomposes first; the single call does two jobs in
+one object — it **critiques Claude's decomposition** and **returns its own cut of the same task**.
+Claude then finalises: it folds in or rejects each finding, reads the counter-proposal
+as evidence, and owns the plan that goes to Phase 4.
 
-Round 2 is the audit this section used to describe, repointed from Claude's first draft at the
-synthesis. Its schema, its carve-outs and its ordering-reconciliation rule are unchanged.
+**What one call costs, stated plainly.** Two guarantees the older three-round loop carried do not
+survive the collapse, and neither is recoverable inside a single call:
 
-**What the extra round buys.** The old audit showed Codex the decomposition first, so its output was
-always a reaction to Claude's framing. It could catch a path that does not exist; it could not
-produce "this repo wants a different cut of the work". Round 1 exists to get that second cut before
-either side has anchored.
-
-**The cost, stated plainly.** The old loop allowed three audit passes and two repair rounds. The
-council allows two critique passes and one repair round. Three calls is the budget; this is where it
-is spent.
+1. **Nothing verifies the revision.** A separate round used to re-check each finding against the
+   rewritten subtask, precisely so that a synthesis asserting "I fixed that" could not suppress the
+   check on it. With one call, every finding Claude incorporates is unverified by Codex. The
+   approval policy below is what compensates: incorporation is the only thing that closes a finding
+   hands-off, and anything else stops for the user.
+2. **The counter-proposal is anchored.** Codex sees Claude's decomposition before proposing, so its
+   cut is a reaction to Claude's framing rather than an independent read of the task. Read
+   `subtasks[]` as a second opinion on the *shape* of the work, not as an unanchored one, and do not
+   describe it as independent in the report.
 
 ### Run identity and artifacts
 
@@ -210,84 +209,22 @@ Pick a short `run_id` at 1b.0 (a timestamp is fine) and give this run **its own 
 
 | Path (all under `graphify-out/.orchestrate_council_<run_id>/`) | Written at | Holds |
 |---|---|---|
-| `proposal_schema.json` | 1b.0 | round 1's output schema |
-| `critique_schema.json` | 1b.0 | rounds 2–3's output schema |
-| `payload<N>.txt` | each round | that round's prompt |
-| `round<N>.json` | each round | that round's `-o` result |
-| `round<N>.log` | each round | the dispatch's stdout — this is where the session id is |
+| `council_schema.json` | 1b.0 | the call's output schema |
+| `payload.txt` | 1b.3 | the call's prompt |
+| `result.json` | 1b.3 | the call's `-o` result |
+| `result.log` | 1b.3 | the dispatch's stdout |
 
 The directory is not decoration. Cleanup removes **only this run's** directory (SKILL.md 6z). Never
 delete by a bare `.orchestrate_*` glob and never "purge stale council scratch": a second
 `/forge-orchestrate` may be mid-council in another session, and without a lock you cannot tell its
 live payloads from a dead run's leftovers. Own your directory; leave every other one alone.
 
-**Round 1 must not read another run's scratch.** `-s read-only` restricts writes, not reads — it is
-not a read allowlist, and Codex can open anything in the repo. A leftover `payload2.txt` from an
-earlier run holds an earlier *Claude synthesis*, and round 1 reading it defeats the independence this
-whole section exists for. Since deleting it is unsafe, the round 1 payload forbids reading it
-instead (see the instruction block below). That is an instruction, not an enforcement — the same
-class of guarantee as "do not edit files", and the honest limit of what this design can promise.
+### The schema
 
-### The schemas
+It goes in before the call. Every field is `required` and `additionalProperties` is `false` — that
+strictness is the shape known to work with `--output-schema`, so keep it on any field you add.
 
-Both go in before the first call. Every field is `required` and `additionalProperties` is `false` —
-that strictness is the shape known to work with `--output-schema`, so keep it on any field you add.
-
-**Round 1 — the independent proposal.** `..._proposal_schema.json`:
-
-```json
-{
-  "type": "object",
-  "properties": {
-    "subtasks": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "id": { "type": "string" },
-          "goal": { "type": "string" },
-          "success_criterion": { "type": "string" },
-          "depends_on": { "type": "array", "items": { "type": "string" } },
-          "files_read": { "type": "array", "items": { "type": "string" } },
-          "files_changed": { "type": "array", "items": { "type": "string" } }
-        },
-        "required": ["id", "goal", "success_criterion", "depends_on",
-                     "files_read", "files_changed"],
-        "additionalProperties": false
-      }
-    },
-    "risks": { "type": "array", "items": { "type": "string" } },
-    "assumptions": { "type": "array", "items": { "type": "string" } },
-    "execution_order": { "type": "array", "items": { "type": "string" } }
-  },
-  "required": ["subtasks", "risks", "assumptions", "execution_order"],
-  "additionalProperties": false
-}
-```
-
-**Shape-valid is not usable.** This schema happily accepts an empty `subtasks`, two subtasks with the
-same `id`, a `depends_on` naming an id that does not exist, a dependency cycle, and an
-`execution_order` unrelated to the subtasks. Check all five after parsing. A proposal that fails any
-of them is **degraded**, not flawed — it spent its call and round 1 is treated as absent (below).
-
-**The prose fields carry the operator's own Codex instructions.** A `goal` or `problem` string comes
-back wearing whatever house style the operator's **global `~/.codex/AGENTS.md`** imposes — greetings,
-confidence tags, the lot. Observed in fixture runs, including one whose entire prompt was "Reply with
-the single word ok" and which still opened with the operator's greeting rule. That global file is the
-carrier, not `project_doc_fallback_filenames`: the key routes the *project's* `CLAUDE.md`, while the
-style arrives from `~/.codex/AGENTS.md` — which operators who keep one house style across both CLIs
-often maintain as a copy of their global `~/.claude/CLAUDE.md`. Naming the wrong cause sends an
-operator to edit the wrong file.
-
-The payloads ask for plain text (below), which handles the common case. Whatever still arrives styled
-is cosmetic and is the operator's own configuration, so do not try to strip it: read these fields for
-their content and write the plan in your own words, which 1b.2 already requires. Never paste a
-proposal string straight into the printed decomposition.
-
-The execute path has the same styled-output exposure in its `FILES CHANGED:` output; C5 normalizes it
-before reconciliation.
-
-**Rounds 2–3 — the critique.** `..._critique_schema.json`, unchanged from the audit it replaces:
+`..._council_schema.json`:
 
 ```json
 {
@@ -309,192 +246,183 @@ before reconciliation.
         "additionalProperties": false
       }
     },
+    "subtasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "goal": { "type": "string" },
+          "success_criterion": { "type": "string" },
+          "depends_on": { "type": "array", "items": { "type": "string" } },
+          "files_read": { "type": "array", "items": { "type": "string" } },
+          "files_changed": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["id", "goal", "success_criterion", "depends_on",
+                     "files_read", "files_changed"],
+        "additionalProperties": false
+      }
+    },
+    "risks": { "type": "array", "items": { "type": "string" } },
+    "assumptions": { "type": "array", "items": { "type": "string" } },
     "execution_order": { "type": "array", "items": { "type": "string" } }
   },
-  "required": ["verdict", "findings", "execution_order"],
+  "required": ["verdict", "findings", "subtasks", "risks", "assumptions", "execution_order"],
   "additionalProperties": false
 }
 ```
 
-Structured output is what makes the loop branchable — a magic `SPEC_VERIFIED` token breaks on any
+**One object, two jobs — do not read them as one.** `verdict` and `findings` grade **Claude's**
+decomposition. `subtasks`, `risks`, `assumptions` and `execution_order` are **Codex's own** proposed
+cut, not a corrected version of Claude's. The payload says so explicitly because this is the thing an
+executor gets backwards: a `verified` verdict alongside a differently-sliced `subtasks[]` is a normal
+result, not a contradiction.
+
+Structured output is what makes the branch decidable — a magic `SPEC_VERIFIED` token breaks on any
 preamble. The `-o` file holds the schema'd object alone, with no prose around it, so `jq -e
 '.verdict'` on it is the read.
 
-### The calls
+**Shape-valid is not usable.** This schema happily accepts an empty `subtasks`, two subtasks with the
+same `id`, a `depends_on` naming an id that does not exist, a dependency cycle, and an
+`execution_order` unrelated to the subtasks. Check all five after parsing. A result that fails any of
+them is **degraded** — it spent the call, and the rules below apply.
 
-Rounds 1 and 2 are **fresh sessions**:
+**The prose fields carry the operator's own Codex instructions.** A `goal` or `problem` string comes
+back wearing whatever house style the operator's **global `~/.codex/AGENTS.md`** imposes — greetings,
+confidence tags, the lot. Observed in fixture runs, including one whose entire prompt was "Reply with
+the single word ok" and which still opened with the operator's greeting rule. That global file is the
+carrier, not `project_doc_fallback_filenames`: the key routes the *project's* `CLAUDE.md`, while the
+style arrives from `~/.codex/AGENTS.md` — which operators who keep one house style across both CLIs
+often maintain as a copy of their global `~/.claude/CLAUDE.md`. Naming the wrong cause sends an
+operator to edit the wrong file.
+
+The payload asks for plain text (below), which handles the common case. Whatever still arrives styled
+is cosmetic and is the operator's own configuration, so do not try to strip it: read these fields for
+their content and write the plan in your own words, which 1b.4 already requires. Never paste a
+returned string straight into the printed decomposition.
+
+The execute path has the same styled-output exposure in its `FILES CHANGED:` output; C5 normalizes it
+before reconciliation.
+
+### The call
+
+A fresh session — there is nothing to resume, and nothing resumes it:
 
 ```bash
 codex exec \
   -m gpt-5.6-sol \
   -c 'model_reasoning_effort="high"' \
   -s read-only \
-  --output-schema graphify-out/.orchestrate_council_<run_id>_<which>_schema.json \
-  -o graphify-out/.orchestrate_council_<run_id>_round<N>.json \
-  - < graphify-out/.orchestrate_council_<run_id>_payload<N>.txt
+  --output-schema graphify-out/.orchestrate_council_<run_id>_council_schema.json \
+  -o graphify-out/.orchestrate_council_<run_id>_result.json \
+  - < graphify-out/.orchestrate_council_<run_id>_payload.txt
 ```
-
-Round 3 **resumes round 2's session** — parent flags before the subcommand, per C6:
-
-```bash
-codex exec -s read-only \
-  resume <council.round2_session_id> \
-  -m gpt-5.6-sol -c 'model_reasoning_effort="high"' \
-  --output-schema graphify-out/.orchestrate_council_<run_id>_critique_schema.json \
-  -o graphify-out/.orchestrate_council_<run_id>_round3.json \
-  - < graphify-out/.orchestrate_council_<run_id>_payload3.txt
-```
-
-**Which rounds resume, and why it is not symmetric.** Round 2 is deliberately *fresh*: a session that
-still remembers writing its own proposal grades the synthesis against that proposal and returns
-preference as `flawed`, which is the exact anchoring round 1 exists to remove. Round 3 *resumes*
-round 2 because that session's context is its own findings list, and "is my finding fixed" is the
-only question worth asking it. The rule generalises: **resume when the prior context is a defect
-list, never when it is a competing proposal.**
-
-`council.round2_session_id` is stored separately from every subtask's `agent_id`. They are different
-sessions with different sandboxes, and C6 must never resume a council session into `workspace-write`.
 
 **`-s read-only` does not mean "cannot run tests".** It restricts filesystem writes by the commands
 Codex issues; a read-only `pytest` invocation is still a command it can run. The no-execution
 requirement is carried by the payload instruction below, not by the sandbox flag. What `-s
-read-only` does guarantee is that no planning round mutates the repo.
+read-only` does guarantee is that the planning call cannot mutate the repo.
 
-### Round 1 payload — the independent proposal
-
-**Claude's decomposition is not an input here, and does not exist yet.** Round 1 is dispatched before
-1b.2 writes a candidate. That ordering, plus the template below having no slot for a decomposition,
-is the whole enforcement mechanism.
-
-The honest statement of the guarantee: *no byte of Claude's candidate reaches round 1, and no such
-artifact exists while it runs.* It is not "Codex is uninfluenced by Claude" — Claude chooses the
-slice key words, and Codex reads `CLAUDE.md` and `doc/` on its own. Do not claim the stronger thing.
+### The payload
 
 Include, paths not pasted text:
 
+- Claude's decomposition: every subtask's goal, success criterion, deps and gate set, plus the
+  per-subtask slice `FILES` from 1b.2.
 - `[TASK]` verbatim, and `[TASK_CRITERIA]` when it exists.
 - `[TASK_FEATURE]` when the task came from a v2 task-list block — the `Builds: Fn` link 5b's spec
   check needs later.
 - `[BLAST_RADIUS]` and `[RULED_OUT]` when `[FROM_DIAGNOSIS]` is true, plus the
-  `doc/diagnosis-<slug>.md` path itself. These are established facts about the task, not Claude's
-  plan, and dropping them makes round 1 re-investigate branches the diagnosis already closed.
-- Any assumption 0e resolved with the user. Same reasoning — it is the user's answer, not Claude's
-  design.
-- The path `graphify-out/graph.json`, the project's `CLAUDE.md`, and the `doc/*.md` paths that exist.
-- The **task-level** slice's `FILES` list, labelled advisory: it was produced from Claude's choice of
-  key words and is a starting point, not a boundary. The task-level slice is the degraded case;
-  per-subtask queries are more reliable. Council per-subtask slices remain advisory, and only Phase
-  3a's re-run supplies the execution slice. `NO_MATCH` → say the graph had no specific match and
-  name the universal docs only.
+  `doc/diagnosis-<slug>.md` path itself. These are established facts about the task, and dropping
+  them makes the counter-proposal re-investigate branches the diagnosis already closed.
+- Any assumption 0e resolved with the user — it is the user's answer, not Claude's design.
+- The path `graphify-out/graph.json`, **the project's `CLAUDE.md`**, and the `doc/*.md` paths that
+  exist. The `CLAUDE.md` path is load-bearing, not boilerplate: without it the critique cannot do the
+  thing this backend cites as its reason for running on `sol` ("cross-checked the plan against the
+  project `CLAUDE.md`'s two-decimal rounding rule"). A subtask that violates a project rule is only
+  visible to a call that was told where the rules live. C1.3's shadow warning applies here too — if
+  an `AGENTS.md` shadows it, naming the path is what still gets it read.
 - These questions, verbatim:
   ```
-  Propose your own decomposition of this task. Inspect the repository yourself — the file list
-  above is an advisory starting point, not a boundary, and you are not bound by it.
-  For each subtask give: a one-line goal, a success criterion that is verifiable as written,
-  which earlier subtasks it depends on, and the files you expect to read and to change.
-  Also return the risks and the assumptions you are making, and the order the subtasks must run.
-  You are in a read-only sandbox and cannot run the test suite. That is expected — do not report
-  it as a problem.
-  Do not read anything under graphify-out/.orchestrate_council_*/ — those are another run's
-  planning notes, and reading them would defeat the point of asking you independently.
-  Do not run the test suite. Do not write code. Do not edit files.
-  Every JSON string field must be plain descriptive text — no greetings, sign-offs or
-  confidence tags.
-  ```
-  Note which carve-outs are absent. "Never flag paths a subtask CREATES" and "missing lint tooling
-  is not a finding" belong to the critique rounds — round 1 is not auditing anything, and pasting
-  audit carve-outs into a proposal prompt just tells it to look for flaws that are not there.
+  You have two separate jobs in one answer. Do both.
 
-### Rounds 2–3 payload — the critique
-
-Round 2 gets the synthesis: every subtask's goal, success criterion, deps and gate set, plus the
-per-subtask slice `FILES` from 1b.4, `[TASK]`, `[TASK_CRITERIA]`, and **the project `CLAUDE.md`
-path** — the same path round 1 carries. Without it the critique cannot do the thing this section
-cites as its reason for running on `sol` ("cross-checked the plan against the project `CLAUDE.md`'s
-two-decimal rounding rule"): a subtask that violates a project rule is only visible to a round that
-was told where the rules live. C1.3's shadow warning applies here too — if an `AGENTS.md` shadows it,
-naming the path is what still gets it read. Round 3, resuming, gets **only the revised subtasks and
-the instruction below** — the session already holds everything else.
-
-- These questions, verbatim:
-  ```
-  Audit this decomposition BEFORE any code is written. For each subtask check:
+  JOB 1 — audit the decomposition above, BEFORE any code is written. For each subtask check:
   - Does every file path a subtask READS, IMPORTS or MODIFIES actually exist in the repo? A path
     a subtask explicitly CREATES is expected not to exist yet — never flag those.
   - Are there missing imports, conflicting dependencies, or omitted migrations?
   - Is a subtask's success criterion actually verifiable as written?
   - Does the stated dependency order work, or does a subtask need something a later one builds?
   - Is any subtask architecturally wrong for this codebase?
+  Report defects only. Do not report stylistic preferences.
+  Return verdict and findings for this job.
+
+  JOB 2 — independently of your audit, propose your OWN decomposition of the original task.
+  Inspect the repository yourself — the file list above is an advisory starting point, not a
+  boundary, and you are not bound by it or by the decomposition above. This is your own cut of
+  the work, NOT a corrected copy of the one you just audited: if you would slice the task
+  differently, slice it differently.
+  For each subtask give: a one-line goal, a success criterion that is verifiable as written,
+  which earlier subtasks it depends on, and the files you expect to read and to change.
+  Also return the risks and the assumptions you are making, and the order the subtasks must run.
+  Return subtasks, risks, assumptions and execution_order for this job. Use your own subtask
+  numbers here; execution_order refers to them, not to the audited plan's.
+
   You are in a read-only sandbox and cannot run the test suite. That is expected — do not report
   it as a finding. Missing lint, coverage or SAST tooling is also not a finding: the gate runner
   detects what exists and honestly skips the rest.
-  Return execution_order using the subtask numbers exactly as written above, in the order they
-  must run.
-  Report defects only. Do not report stylistic preferences.
   Do not run the test suite. Do not write code. Do not edit files.
   Every JSON string field must be plain descriptive text — no greetings, sign-offs or
   confidence tags.
   ```
   All three carve-outs are load-bearing and were added after fixture runs. Without the first, the
   audit reports every new file the plan creates as a missing path and drowns the real findings.
-  Without the second, every round emits a spurious "pytest could not start" finding. Without the
-  third, any repo with no linter burns a round on "the lint gate is not verifiable" — which 5a
-  already handles by design, so rewriting a subtask over it is pure waste.
-- Round 3 appends, verbatim:
-  ```
-  For each finding you returned last turn, check the revised subtask text above and say whether
-  it is now fixed. Verify against the text yourself — a claim that something was addressed is
-  not evidence that it was. Do not raise new stylistic points.
-  ```
-  The verification is deliberately not "do not re-report resolved findings". A synthesis asserting
-  that it fixed something must not be able to suppress the check on it.
+  Without the second, the call emits a spurious "pytest could not start" finding. Without the third,
+  any repo with no linter burns the call on "the lint gate is not verifiable" — which 5a already
+  handles by design, so rewriting a subtask over it is pure waste.
 
-### The budget — 3 calls, hard
+  The job-2 wording is load-bearing too. Asked for a proposal right after an audit, a model returns
+  the audited plan with the findings patched in, which is the one thing this job is not for — Claude
+  can patch its own plan from `findings` and needs no call to do it.
 
-`council.calls_used` increments on **every** dispatch, including one that returns nothing usable.
-There is no retry: a wasted call is spent.
+### The budget — 1 call, hard
 
-- Round 2 `verified` → **stop at 2 calls**, continue hands-off. The common case.
-- Round 2 `flawed` → Claude revises **only the subtasks the findings name** (unaffected subtasks stay
-  byte-identical), re-slices every subtask it revised, then round 3 verifies.
-- Round 3 `verified` → continue hands-off.
-- Round 3 `flawed` → Claude's plan is authoritative. It does **not** hand the plan back unfinished
-  and it does **not** claim consensus: see "Claude finalises" below.
+`council.calls_used` increments on the dispatch whether or not it returns anything usable. There is
+no retry: a wasted call is spent, and there is no second `codex exec` in Phase 1b. An unbounded
+planning loop burns both quotas.
 
-There is no 4th `codex exec`. An unbounded planning loop burns both quotas.
-
-**Degraded rounds.** A missing, empty, unparseable, or semantically invalid `-o` file costs its call
-and is never retried. What follows depends on which round died, and the difference matters:
-
-| Round | Effect | Report as |
-|---|---|---|
-| 1 | No independent proposal. Claude plans alone — the pipeline still works, it just lost the second opinion. Continue to round 2 normally. | `degraded — proposal unusable` |
-| 2 | The synthesis was never critiqued. Treat as **unresolved**, not as verified. | `degraded — critique unusable` |
-| 3 | Round 2's findings stand unaddressed. Treat as **unresolved**. | `degraded — verification unusable` |
-
-Silence is not agreement. A round that failed to answer must never be scored as `verified`.
+**Degraded.** A missing, empty, unparseable, or semantically invalid `-o` file costs the call and is
+never retried. The decomposition was never critiqued, so the run is **unresolved** — report it as
+`degraded — council unusable` and take the approval stop below. Silence is not agreement: a call that
+failed to answer must never be scored `verified`.
 
 ### Claude finalises — always, in every terminal state
 
 Before anything is dispatched to Phase 4, Claude produces the authoritative plan and, for each
-objection still outstanding, either incorporates it or rejects it **with the repository evidence that
-justifies the rejection**. "Codex disagreed and I ignored it" is not a terminal state.
+finding, either incorporates it or rejects it **with the repository evidence that justifies the
+rejection**. "Codex disagreed and I ignored it" is not a terminal state. Read `subtasks[]` as
+evidence about the shape of the work — where it slices differently, say why you kept your slice —
+and never adopt it wholesale or discard it unread.
 
-**Ordering conflict.** The synthesis emits per-subtask `deps`. If a round's `execution_order`
-disagrees with them, that disagreement is itself a finding Claude reconciles **in the decomposition**
-— never a silent override at dispatch time. Two sources of truth for sequencing is a bug. This
-reconciliation happens even when the final round is `flawed`, because execution can still proceed
-after approval; leaving the order undefined there was the old flow's luxury, not this one's.
-Phase 4 follows the reconciled `deps`; the **final** round's `execution_order` is the tiebreaker for
-subtasks the deps leave unordered. Round 1's `execution_order` is advisory input to the synthesis
-only — it never overrides anything.
+**Ordering conflict.** The plan emits per-subtask `deps`. If the returned `execution_order` disagrees
+with them, that disagreement is itself a finding Claude reconciles **in the decomposition** — never a
+silent override at dispatch time. Two sources of truth for sequencing is a bug. This reconciliation
+happens even when the verdict is `flawed`, because execution can still proceed after approval. Phase
+4 follows the reconciled `deps`; `execution_order` is the tiebreaker only for subtasks the deps leave
+unordered, and only after it has been mapped onto Claude's subtask numbers — it is returned against
+Codex's own cut, which may not share them.
 
 **Then apply the approval policy:**
 
-- Everything resolved → continue hands-off. No approval stop. This is the design's normal path.
-- Anything unresolved — a round-3 `flawed`, or a degraded round 2 or 3 — → print the final plan, the
-  unresolved objection, and the concrete risk it names, then **stop and ask before executing**.
-  Do not begin execution on an objection the user has not seen.
+- `verified`, or `flawed` with **every** finding incorporated → continue hands-off. No approval stop.
+  This is the design's normal path.
+- **Any finding not incorporated**, or a degraded call → print the final plan, the outstanding
+  objection, and the concrete risk it names, then **stop and ask before executing**. Do not begin
+  execution on an objection the user has not seen.
+
+**A rejection is an approval stop, even a well-evidenced one.** With no verifying round, a finding
+Claude argued away has had no second opinion at all — the evidence requirement above is what makes
+the rejection reviewable, not what closes it. Incorporating a finding is the only thing that closes
+one hands-off, and a run that ended on a rejection is never described as consensus.
 
 The approval stop is a **pause, not an abort**: keep this run's council artifacts (SKILL.md 6z), the
 user is expected to answer and continue.
@@ -691,9 +619,7 @@ entirely.
 | A dispatch looks finished seconds after it started | the completion check grepped for a string the payload also contains, and matched the echoed prompt | wait on the dispatch's exit, or match `^tokens used` (C2) |
 | `error: unexpected argument '-s' found` on a retry | `-s`/`-C` placed after `resume` | move them before the subcommand (C6) |
 | Codex reports a file it could not write | path outside the writable root | add `--add-dir <path>` and retry that subtask |
-| Empty or unparseable `-o` file after a council round | run died before its final turn | it still counts against the 3 — degrade per C3, never score it `verified` |
-| A council round's JSON parses but has duplicate ids, a dangling `depends_on`, a cycle, or an unrelated `execution_order` | schema validity is not semantic validity | same as unparseable — degraded, and the call is spent (C3) |
-| Round 3 dispatched but `council.round2_session_id` was never captured | the session id was not read off stdout at round 2 | fall back to a fresh `codex exec` carrying round 2's findings in the payload; it is still call 3 |
+| Empty or unparseable `-o` file after the council call, or JSON that parses but has duplicate ids, a dangling `depends_on`, a cycle, or an unrelated `execution_order` | the run died before its final turn, or schema validity is not semantic validity | the call is spent either way — degrade per C3, never score it `verified`, and take the approval stop |
 | `git status` delta is empty after execute | **check the snapshot cwd first** (C5) — in worktree mode a bare `git status` reads the main checkout and always comes back empty. Otherwise no tracked path changed | fix the `-C`; if the cwd was right, confirm any scoped ignored paths per C5, then re-dispatch with the goal restated only if no write was confirmed — unless the dispatch was killed or has no `tokens used` trailer; use the row below |
 | A dispatch was killed mid-run or has no `tokens used` trailer | detachment removes the cap but does not guarantee survival. With a dirty baseline, the status delta is unsound: status reports a path's status, not content, and C5's snapshot is a path list, never a completion record | **This overrides the empty-delta row above.** Baseline clean + delta empty: no tracked path was written; an ignored path may still have been written, so when the subtask scopes ignored paths, confirm them per C5 before treating this as a clean resume. Otherwise resume the session id. Baseline clean + delta non-empty: inspect the subtask's changes; `git checkout -- <path>` is safe for tracked paths because HEAD is this subtask's baseline. Untracked paths in the delta are this subtask's creations: inspect them and leave them unless the user chooses removal; never use `git clean` here. Baseline dirty: **never restore** — inspect every scoped path's diff before resuming, because HEAD would erase earlier subtasks. In worktree mode, use C5's `git -C <worktree abs path> status --porcelain` form when evaluating all three branches. |
 | Reconciled delta contains files from an unrelated subtask | `[NO_COMMIT]`, no moving baseline | expected; 5b's out-of-scope note (single-tree `[NO_COMMIT]`) covers it |
