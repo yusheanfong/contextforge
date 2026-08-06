@@ -454,32 +454,33 @@ hook), so commit or sync first if you have uncommitted structural changes.
 Claude still synthesizes, reviews, decides and commits. Codex supplies a second independent planning
 judgment and does the implementation. Two things change:
 
-- **A planning council (Phase 1b).** Before any code is written, at most **3 read-only Codex calls**:
+- **A planning council (Phase 1b).** Claude decomposes, then **one read-only Codex call** does two
+  jobs in a single structured answer, before any code is written:
 
-  1. **Codex proposes first, from the original task** — its own subtasks, criteria, dependencies,
-     expected files, risks and order. It does **not** see Claude's decomposition, which does not
-     exist yet. That ordering is the point: the old one-way audit showed Codex Claude's plan first,
-     so it could catch a path that doesn't exist but never propose a different cut of the work.
-  2. **Claude synthesizes both** against live repository evidence and records what it overrode and
-     why.
-  3. **Codex critiques the synthesis** and returns a structured verdict. `verified` stops the council
-     right there, at two calls — the common case. `flawed` sends only the named subtasks back for a
-     rewrite, and one final call verifies them.
+  1. **It audits Claude's decomposition** — paths that don't exist, missing migrations, criteria that
+     aren't verifiable as written, a dependency order that can't run, a subtask that's architecturally
+     wrong for this codebase — and returns a `verified`/`flawed` verdict with findings.
+  2. **It returns its own cut of the same task** — its subtasks, criteria, dependencies, expected
+     files, risks and order. Not a patched copy of Claude's: a second opinion on how the work should
+     be sliced at all, which an audit alone can never produce.
+  3. **Claude decides**, folding in or rejecting each finding against live repository evidence and
+     saying where it kept its own slice over Codex's.
 
-  If a disagreement survives the last call, Claude's plan is authoritative — but the run **prints
-  Codex's objection and its risk and asks you before executing**. It never claims a consensus it
-  didn't reach. The existing review loop catches bad *code*; this catches a bad *plan*, while fixing
-  it is still cheap.
+  `verified`, or `flawed` with every finding folded in, runs on hands-off. Anything Claude did **not**
+  fold in — including an objection it rejected with evidence — makes the run **print Codex's objection
+  and its risk and ask you before executing**: with only one call, nothing re-checked that rejection.
+  It never claims a consensus it didn't reach. The existing review loop catches bad *code*; this
+  catches a bad *plan*, while fixing it is still cheap.
 - **Phase 4 dispatches `codex exec`** with the same graph-sliced payload a Claude worker would get.
 
 The phases run on different Codex tiers, passed explicitly with `-m` (and `-c
-model_reasoning_effort`) so nothing depends on your config default: every council call on
+model_reasoning_effort`) so nothing depends on your config default: the council call on
 **`gpt-5.6-sol`** at `high` effort — planning is where a cheap pass fails silently, returning wording
 nits instead of "this subtask is architecturally wrong for this codebase" — and execution on
 **`gpt-5.6-terra`**, or `sol` for a subtask involving multi-file integration or design judgment.
 `sol`/`high` is the planning tier, not a blanket default.
 
-Planning writes nothing: every council call runs in a `read-only` sandbox and is told not to run
+Planning writes nothing: the council call runs in a `read-only` sandbox and is told not to run
 tests, edit files, branch, stage or commit.
 
 What does *not* change: the graph slice, the doc slice, the CI gates, the reviewer (still a Claude
@@ -645,10 +646,11 @@ asking for approval at every step. It interrupts you in exactly these cases:
   `CLAUDE.md` explicitly. If both `AGENTS.md` and `CLAUDE.md` exist, the preflight warns only when
   they differ beyond graphify fence marker names, then continues. It never edits your
   `~/.codex/config.toml`.
-- **The `codex` planning council ends unresolved** — a critique Claude couldn't resolve, or a round
-  that returned nothing usable. Claude finalizes the plan either way, then prints Codex's objection
-  and its risk and asks before executing. Never a 4th planning call, and never a run that claims
-  consensus it didn't reach. A council that agrees doesn't stop at all.
+- **The `codex` planning council ends unresolved** — a finding Claude didn't fold into the plan
+  (rejecting it with evidence still counts, since nothing re-checks that rejection), or a call that
+  returned nothing usable. Claude finalizes the plan either way, then prints Codex's objection and
+  its risk and asks before executing. Never a 2nd planning call, and never a run that claims
+  consensus it didn't reach. A council whose findings all landed doesn't stop at all.
 
 And two things it never does, regardless: **tag a release**, or **merge to `main`**. It leaves you
 on the feature branch. You own the merge.
