@@ -522,11 +522,11 @@ Flow:
    base rather than a squashed copy of it
 4. **On conflict** — `git merge --abort`, confirms the base is back at the SHA it started from, and
    hands you the resolve-on-the-branch recipe. It never resolves a conflict for you
-5. **Verify, four ways** — the branch is an ancestor of the base, no commits left on it, none of the
-   branch's own changes missing from the base, and `git branch --merged` lists it. **Any failure and
-   nothing gets deleted**
-6. **Delete** — `git branch -d`, never `-D`, so git's own unmerged check stays as a backstop, plus
-   any `feature/x-st1`-style sub-branches a parallel `/forge-orchestrate` run left behind
+5. **Verify ancestry** — `git merge-base --is-ancestor` proves the branch tip is reachable from the
+   base. **Any failure and nothing gets deleted** — it prints the commits still missing instead
+6. **Delete** — `git branch -d`, never `-D`. That's git re-testing the same reachability on the
+   deletion itself, which is the backstop `-D` would discard. Plus any `feature/x-st1`-style
+   sub-branches a parallel `/forge-orchestrate` run left behind
 7. **Report** — every check with its real result, plus the push command and the exact undo SHA
 
 **Local only.** No `push`, no `fetch`, no remote writes — it works offline, and the merge doesn't
