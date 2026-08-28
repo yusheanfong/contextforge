@@ -118,6 +118,11 @@ uses, which means exactly "not confirmed against source." **Never present them a
 Orphans, duplicate labels and dead files cannot be computed without the scanner; say so in one line
 rather than omitting the buckets silently.
 
+This skill's epistemics are phase-shaped — the graph points, the code decides — so a plan that may
+not name its own stages has to say that split in ordinary words. Use those words: *the graph
+points, the code decides*. A *Done when* reads "the live function is read and either justified as
+central or split", never "confirmed against source in PHASE 2".
+
 *How it runs* is one line: `Report-only — never edits, never commits.` *Not doing* names the two
 standing exemptions: tests and files needed for current behavior are never delete-listed.
 

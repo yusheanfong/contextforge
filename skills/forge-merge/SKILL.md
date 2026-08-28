@@ -107,7 +107,7 @@ Two procedural rules:
 <!-- /forge:shared-block plan-mode -->
 
 **Filling the plan.** *What changes* is one row per commit 0e listed, plus a row for each branch
-PHASE 3 would delete. *Decisions I made for you* carries the resolved `[BASE]` and which probe
+that would be deleted. *Decisions I made for you* carries the resolved `[BASE]` and which probe
 resolved it — guessing there merges into the wrong branch, so the user should see it. *How it runs*
 is one line: `--no-ff merge on [BASE], then git branch -d. Local only: no push, no fetch.` *Verify*
 is the ancestry check, `git merge-base --is-ancestor [BRANCH] [BASE]`.

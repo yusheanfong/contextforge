@@ -81,8 +81,8 @@ letting the user assume it was analyzed is not.
 
 - **What changes** — one row per file created or overwritten. Name them exactly; this is the whole
   value of the plan for a scaffolding command.
-- **Decisions I made for you** — the detected mode and which STEP 1 check selected it, plus every
-  answer the NEW PROJECT interview settled.
+- **Decisions I made for you** — the detected mode and what selected it (the argument given, the
+  docs already present, or the file counts), plus every answer the NEW PROJECT interview settled.
 - **How it runs** — one line naming the fence contract: `Writes only inside graphify:auto fences;
   everything outside them is left verbatim.`
 - **Not doing** — the files it will not touch: `doc/prd.md`, `doc/task-list.md`,

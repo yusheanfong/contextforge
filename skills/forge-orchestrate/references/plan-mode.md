@@ -82,8 +82,8 @@ Everything else is blocked because it writes:
 
 - **What changes** is the 1a decomposition, one subtask per row. The *Files* column comes from
   `graphify-out/GRAPH_REPORT.md` plus grep, not from a slice — so **mark that column `unsliced`**
-  and add one line under *How it runs*: `File lists are unsliced; Phase 3a re-slices
-  authoritatively before any worker is dispatched.` The hazard is the one Phase 3a already names
+  and add one line under *How it runs*: `File lists are estimates from the graph report; they are
+  recomputed from the graph before any code is written.` The hazard is the one Phase 3a already names
   for the council's advisory slices: a list computed before the branch exists can describe a tree
   nobody is editing.
 - **Decisions I made for you** carries whatever 0e resolved, the derived branch name, and — from a
