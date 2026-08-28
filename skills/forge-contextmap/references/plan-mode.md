@@ -19,9 +19,9 @@ and a verification section: *Context* is that section, *What changes* is the app
 one shape, never both — two heading sets compounding is what produces the wall of words.
 
 **The same holds for the harness's process.** Its plan workflow prescribes Explore agents and then
-a Plan agent before writing. This skill's read-only steps *are* that exploration, already scoped by
-the graph and by the skill itself — so do not spawn agents to re-derive what you have just read.
-Dispatch one only for a question those steps genuinely left open.
+a Plan agent before writing. The steps this skill just ran *are* that exploration, already scoped,
+so do not spawn those agents to repeat work already done. Where this skill states its own rule
+about subagents, outside this block, that rule governs.
 
 Write the plan file with exactly these headings, in this order:
 
@@ -54,9 +54,11 @@ has to decide goes under *Decisions I made for you* — never buried in prose, w
 
 Two procedural rules:
 
-- **ExitPlanMode is the approval.** Do not ask a second confirmation question in chat before or
-  after it. Where this skill has its own approval checkpoint, that checkpoint's content becomes the
-  plan body and ExitPlanMode asks its question.
+- **ExitPlanMode is the approval.** Do not ask a second confirmation question about *this plan*,
+  in chat, before or after it. Where this skill has its own checkpoint covering the same ground,
+  that checkpoint's content becomes the plan body and ExitPlanMode asks its question. A later
+  checkpoint over content the plan could not have carried — something this skill only drafts after
+  approval — is a different question and is still asked.
 - **On approval, resume at the phase named below** and re-run anything the read-only pass could
   only approximate.
 <!-- /forge:shared-block plan-mode -->
@@ -85,8 +87,10 @@ letting the user assume it was analyzed is not.
   docs already present, or the file counts), plus every answer the NEW PROJECT interview settled.
 - **How it runs** — one line naming the fence contract: `Writes only inside graphify:auto fences;
   everything outside them is left verbatim.`
-- **Not doing** — the files it will not touch: `doc/prd.md`, `doc/task-list.md`,
-  `doc/diagnosis-*.md`.
+- **Not doing** — `doc/diagnosis-*.md`, always. `doc/prd.md` and `doc/task-list.md` go here only
+  when the detected mode leaves them alone: SYNC always does, EXISTING PROJECT does when they
+  already exist. NEW PROJECT writes both and MIGRATION rewrites them, so in those two modes they
+  are *What changes* rows and listing them here contradicts the plan's own table.
 
 ## On approval
 

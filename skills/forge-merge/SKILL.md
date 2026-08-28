@@ -41,9 +41,9 @@ code; don't retry and don't work around it.
 ### 0a.0 Plan mode
 
 If you have been told to write your plan to a plan file and make no other edits, plan mode is
-active. 0a through 0e run in full and are read-only but for one command — resolving the branch
-and `[BASE]`, checking the tree, checking for leftover worktrees, and showing what is about to land
-is exactly the content a merge plan needs. The exception is 0d's first command: `git worktree
+active. Plan mode runs 0a through 0e with exactly one command excepted — resolving the branch and
+`[BASE]`, checking the tree, checking for leftover worktrees, and showing what is about to land is
+exactly the content a merge plan needs. The exception is 0d's first command: `git worktree
 prune` deletes stale administrative directories under `.git/worktrees`, so skip it and run `git
 worktree list` alone. The leftover-worktree check still happens; only the pruning waits — and
 because the prune exists so that a worktree already deleted from disk does not stop the run,
@@ -67,9 +67,9 @@ and a verification section: *Context* is that section, *What changes* is the app
 one shape, never both — two heading sets compounding is what produces the wall of words.
 
 **The same holds for the harness's process.** Its plan workflow prescribes Explore agents and then
-a Plan agent before writing. This skill's read-only steps *are* that exploration, already scoped by
-the graph and by the skill itself — so do not spawn agents to re-derive what you have just read.
-Dispatch one only for a question those steps genuinely left open.
+a Plan agent before writing. The steps this skill just ran *are* that exploration, already scoped,
+so do not spawn those agents to repeat work already done. Where this skill states its own rule
+about subagents, outside this block, that rule governs.
 
 Write the plan file with exactly these headings, in this order:
 
@@ -102,9 +102,11 @@ has to decide goes under *Decisions I made for you* — never buried in prose, w
 
 Two procedural rules:
 
-- **ExitPlanMode is the approval.** Do not ask a second confirmation question in chat before or
-  after it. Where this skill has its own approval checkpoint, that checkpoint's content becomes the
-  plan body and ExitPlanMode asks its question.
+- **ExitPlanMode is the approval.** Do not ask a second confirmation question about *this plan*,
+  in chat, before or after it. Where this skill has its own checkpoint covering the same ground,
+  that checkpoint's content becomes the plan body and ExitPlanMode asks its question. A later
+  checkpoint over content the plan could not have carried — something this skill only drafts after
+  approval — is a different question and is still asked.
 - **On approval, resume at the phase named below** and re-run anything the read-only pass could
   only approximate.
 <!-- /forge:shared-block plan-mode -->
