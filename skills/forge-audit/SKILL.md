@@ -54,15 +54,23 @@ Python file written to disk before it is executed, so the four bloat buckets are
 
 <!-- forge:shared-block plan-mode -->
 **Governing rule — the plan describes the work and the decisions, never the machinery that will
-execute it.** Phase numbers, gate names, worktrees, the planning council, slice scripts and
-subagent dispatch do not belong in the plan, except as at most one line under *How it runs*. A
-summary of this skill's own pipeline is not a plan — it is the wall of words the user cannot read.
+execute it.** The machinery is whatever executes *this* plan: this skill's own stage numbers —
+whichever spelling it uses, `PHASE 3` or `STEP 1` or `0a` — plus gate names, worktrees, the
+planning council, slice scripts and subagent dispatch. None of it belongs in the plan, except as at
+most one line under *How it runs*. Naming the subject matter is a different thing and stays
+allowed: a plan whose subject *is* a phased skill still names the sections it edits. A summary of
+this skill's own pipeline is not a plan — it is the wall of words the user cannot read.
 
 **These six headings are the harness's own slots, not a second set layered on top.** Where the
 plan-mode instructions ask for a Context section, a recommended approach, the critical files named,
 and a verification section: *Context* is that section, *What changes* is the approach and its
 *Files* column is the critical-files requirement, and *Verify* is the verification section. Emit
 one shape, never both — two heading sets compounding is what produces the wall of words.
+
+**The same holds for the harness's process.** Its plan workflow prescribes Explore agents and then
+a Plan agent before writing. This skill's read-only steps *are* that exploration, already scoped by
+the graph and by the skill itself — so do not spawn agents to re-derive what you have just read.
+Dispatch one only for a question those steps genuinely left open.
 
 Write the plan file with exactly these headings, in this order:
 
@@ -87,9 +95,11 @@ The exact commands that prove it worked.
 Explicit out-of-scope list.
 ```
 
-Budget: prose outside the tables stays under 200 words. Never restate the request back at the
-user. Anything the user has to decide goes under *Decisions I made for you* — never buried in
-prose, where it is missed.
+Length: as short as it can be while staying detailed and easy to understand, and no longer. There
+is no word count — prefer a table to prose, and cut any sentence that repeats what a table already
+says, but never cut evidence or a decision to hit a length. The governing rule above already bans
+what actually makes these plans long. Never restate the request back at the user. Anything the user
+has to decide goes under *Decisions I made for you* — never buried in prose, where it is missed.
 
 Two procedural rules:
 
