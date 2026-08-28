@@ -302,6 +302,14 @@ Reach for `/forge-audit` on-demand when cruft has piled up.
 
 ## The Five Skills
 
+**All five run under Claude Code's plan mode**, and all five write the same shaped plan: Context ·
+What changes · Decisions I made for you · How it runs · Verify · Not doing. The governing rule is
+that the plan describes *the work and the decisions*, never the pipeline that will execute it — no
+phase numbers, gate names or worktrees outside a single line. Each skill runs only its read-only
+phases, says what it could not compute, and names where it resumes once you approve. ExitPlanMode is
+the approval; no skill asks a second time.
+
+
 ### /forge-contextmap — Scaffold the Docs, Build the Map
 
 `/forge-contextmap` solves both the scaffolding problem and the accuracy problem:
@@ -854,6 +862,7 @@ inside Python). Edit one copy, update the rest:
 | `bloat-buckets` | `skills/forge-audit/SKILL.md` Phase 1 · `skills/forge-contextmap/references/sync.md` S3.6 — bodies intentionally differ; the checker compares the orphan, duplicate-source, and god-node threshold expressions only |
 | `minimal-ladder` | `skills/forge-orchestrate/SKILL.md` 3c (`variant:payload` — single copy, never compared) · same file 5b (`variant:review`) · `skills/forge-audit/SKILL.md` Phase 2 (`variant:audit`) |
 | `source-doc-map` | `skills/forge-orchestrate/SKILL.md` 3b (`variant:dispatch`) · `skills/forge-contextmap/references/doc-templates.md` CLAUDE.md rule 1 (`variant:template`) |
+| `plan-mode` | `skills/forge-orchestrate/references/plan-mode.md` · `skills/forge-diagnose/references/plan-mode.md` · `skills/forge-contextmap/references/plan-mode.md` · `skills/forge-merge/SKILL.md` 0a.0 · `skills/forge-audit/SKILL.md` 0b.1 — no `variant:`, so all five bodies are compared against each other. Skill-specific rules live *outside* the markers on purpose; putting them inside would force a variant per copy and the checker skips singleton groups |
 
 Two constraints that are not negotiable:
 
