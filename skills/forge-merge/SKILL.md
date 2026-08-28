@@ -45,8 +45,11 @@ active. 0a through 0e run in full and are read-only but for one command — reso
 and `[BASE]`, checking the tree, checking for leftover worktrees, and showing what is about to land
 is exactly the content a merge plan needs. The exception is 0d's first command: `git worktree
 prune` deletes stale administrative directories under `.git/worktrees`, so skip it and run `git
-worktree list` alone. The leftover-worktree check still happens; only the pruning waits. Nothing
-past 0e runs: PHASE 1 merges, PHASE 3 deletes.
+worktree list` alone. The leftover-worktree check still happens; only the pruning waits — and
+because the prune exists so that a worktree already deleted from disk does not stop the run,
+ignore any listed entry whose path is gone. That is stale metadata, not a leftover worktree; only
+one whose directory is still present can hold `[BRANCH]`. Nothing past 0e runs: PHASE 1 merges,
+PHASE 3 deletes.
 
 <!-- forge:shared-block plan-mode -->
 **Governing rule — the plan describes the work and the decisions, never the machinery that will

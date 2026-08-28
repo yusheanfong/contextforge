@@ -100,7 +100,7 @@ Everything else is blocked because it writes:
 
 ## On approval
 
-Resume at **0b** (resolve `[PYTHON_CMD]`), then Phase 2 onward exactly as written. Re-run 3a's
-slice for every subtask and overwrite the plan's unsliced file lists — they were an estimate, and
-Phase 3a is authoritative. Under `[BACKEND] = codex`, run the council at 1b before Phase 2: it was
-never dispatched, so nothing has critiqued this decomposition yet.
+Resume at **0b** (resolve `[PYTHON_CMD]`) and **0c**'s freshness note, then Phase 2 onward exactly
+as written. Re-run 3a's slice for every subtask and overwrite the plan's unsliced file lists —
+they were an estimate, and Phase 3a is authoritative. Under `[BACKEND] = codex`, run the council at
+1b before Phase 2: it was never dispatched, so nothing has critiqued this decomposition yet.

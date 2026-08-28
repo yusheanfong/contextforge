@@ -90,5 +90,7 @@ letting the user assume it was analyzed is not.
 
 ## On approval
 
-Resume at the detected mode's first writing step and follow its reference file exactly. Nothing in
-the plan replaces those steps — the mode still runs in full.
+Resume at the detected mode's **first** step, not its first writing step, and follow its reference
+file exactly. The read-only prerequisites the plan pass stopped short of are still prerequisites:
+SYNC needs S1's interpreter and S1.5's CLI before S2.5's prune can run, and EXISTING PROJECT needs
+E1 before E2. Nothing in the plan replaces those steps — the mode runs in full.
