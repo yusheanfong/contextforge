@@ -70,6 +70,12 @@ Run, in order: **0a** (the graph hard-stop — still the cheapest stop and still
 the plan), **0f** (derive `[BRANCH]`, and only derive it: creating a branch is a write), then
 **1a**'s decomposition rules.
 
+**0e's threshold under plan mode: ask only when proceeding under either reading would waste the
+run.** A fork that is real without being blocking — say, whether "without touching git" means no
+writes or no git at all — is not a question, it is a decision. Take it, and give it one line under
+*Decisions I made for you*. That is visible where the user is already reading and costs no round
+trip; a question there costs one and answers nothing the plan could not have stated.
+
 Everything else is blocked because it writes:
 
 - **Phase 3a cannot slice.** The slice script is written to `graphify-out/.orchestrate_slice.py`
@@ -81,11 +87,11 @@ Everything else is blocked because it writes:
 ## Filling the plan
 
 - **What changes** is the 1a decomposition, one subtask per row. The *Files* column comes from
-  `graphify-out/GRAPH_REPORT.md` plus grep, not from a slice — so **mark that column `unsliced`**
-  and add one line under *How it runs*: `File lists are estimates from the graph report; they are
-  recomputed from the graph before any code is written.` The hazard is the one Phase 3a already names
-  for the council's advisory slices: a list computed before the branch exists can describe a tree
-  nobody is editing.
+  `graphify-out/GRAPH_REPORT.md` plus grep, not from a slice — so **write that column's header as
+  `Files (unsliced)`**, in the header and not in every cell, and add one line under *How it runs*:
+  `File lists are estimates from the graph report; they are recomputed from the graph before any
+  code is written.` The hazard is the one Phase 3a already names for the council's advisory slices:
+  a list computed before the branch exists can describe a tree nobody is editing.
 - **Decisions I made for you** carries whatever 0e resolved, the derived branch name, and — from a
   diagnosis handoff — the §7 fix direction you adopted.
 - **How it runs**: the branch name, that it commits per subtask, `--no-commit` if set, and the
