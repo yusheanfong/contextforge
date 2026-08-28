@@ -45,6 +45,74 @@ Run /forge-contextmap first to build the knowledge graph, then re-run /forge-aud
 ```
 <!-- /forge:shared-block graph-hard-stop -->
 
+### 0b.1 Plan mode
+
+If you have been told to write your plan to a plan file and make no other edits, plan mode is
+active. The hard-stop above still applies first. Nothing past it runs: PHASE 1's scanner is a
+Python file written to disk before it is executed, so the four bloat buckets are unavailable and
+0c's interpreter probe has nothing to serve.
+
+<!-- forge:shared-block plan-mode -->
+**Governing rule — the plan describes the work and the decisions, never the machinery that will
+execute it.** Phase numbers, gate names, worktrees, the planning council, slice scripts and
+subagent dispatch do not belong in the plan, except as at most one line under *How it runs*. A
+summary of this skill's own pipeline is not a plan — it is the wall of words the user cannot read.
+
+**These six headings are the harness's own slots, not a second set layered on top.** Where the
+plan-mode instructions ask for a Context section, a recommended approach, the critical files named,
+and a verification section: *Context* is that section, *What changes* is the approach and its
+*Files* column is the critical-files requirement, and *Verify* is the verification section. Emit
+one shape, never both — two heading sets compounding is what produces the wall of words.
+
+Write the plan file with exactly these headings, in this order:
+
+```
+## Context
+1–2 sentences: what was asked and why it needs doing.
+
+## What changes
+| # | Change | Done when | Files |
+One row per unit of work. One line per row — never wrap a cell.
+
+## Decisions I made for you
+One line each: the choice, and the alternative rejected. Write "none" if there were none.
+
+## How it runs
+At most 4 lines total: branch/commits, gates, parallelism, what stays untouched.
+
+## Verify
+The exact commands that prove it worked.
+
+## Not doing
+Explicit out-of-scope list.
+```
+
+Budget: prose outside the tables stays under 200 words. Never restate the request back at the
+user. Anything the user has to decide goes under *Decisions I made for you* — never buried in
+prose, where it is missed.
+
+Two procedural rules:
+
+- **ExitPlanMode is the approval.** Do not ask a second confirmation question in chat before or
+  after it. Where this skill has its own approval checkpoint, that checkpoint's content becomes the
+  plan body and ExitPlanMode asks its question.
+- **On approval, resume at the phase named below** and re-run anything the read-only pass could
+  only approximate.
+<!-- /forge:shared-block plan-mode -->
+
+**Filling the plan.** The sweep scope (`$ARGUMENTS`' path prefix, or the whole repo) and the
+high-degree node table read straight out of `graphify-out/GRAPH_REPORT.md` — those are god-node
+candidates and nothing more. Tag every one `[unconfirmed]`, the same tag `--graph-only` already
+uses, which means exactly "not confirmed against source." **Never present them as findings.**
+Orphans, duplicate labels and dead files cannot be computed without the scanner; say so in one line
+rather than omitting the buckets silently.
+
+*How it runs* is one line: `Report-only — never edits, never commits.` *Not doing* names the two
+standing exemptions: tests and files needed for current behavior are never delete-listed.
+
+**On approval**, resume at 0c and run PHASE 1 onward as written. The candidates above are
+superseded by what the scanner returns; they were a preview, not a result.
+
 ### 0c. Resolve the Python interpreter as `[PYTHON_CMD]`
 
 <!-- forge:shared-block python-cmd variant:audit -->

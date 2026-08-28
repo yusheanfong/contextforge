@@ -38,6 +38,73 @@ code; don't retry and don't work around it.
 
 ## PHASE 0: Resolve What Is Being Merged
 
+### 0a.0 Plan mode
+
+If you have been told to write your plan to a plan file and make no other edits, plan mode is
+active. 0a through 0e are all read-only and run in full — resolving the branch and `[BASE]`,
+checking the tree, checking for leftover worktrees, and showing what is about to land is exactly
+the content a merge plan needs. Nothing past 0e runs: PHASE 1 merges, PHASE 3 deletes.
+
+<!-- forge:shared-block plan-mode -->
+**Governing rule — the plan describes the work and the decisions, never the machinery that will
+execute it.** Phase numbers, gate names, worktrees, the planning council, slice scripts and
+subagent dispatch do not belong in the plan, except as at most one line under *How it runs*. A
+summary of this skill's own pipeline is not a plan — it is the wall of words the user cannot read.
+
+**These six headings are the harness's own slots, not a second set layered on top.** Where the
+plan-mode instructions ask for a Context section, a recommended approach, the critical files named,
+and a verification section: *Context* is that section, *What changes* is the approach and its
+*Files* column is the critical-files requirement, and *Verify* is the verification section. Emit
+one shape, never both — two heading sets compounding is what produces the wall of words.
+
+Write the plan file with exactly these headings, in this order:
+
+```
+## Context
+1–2 sentences: what was asked and why it needs doing.
+
+## What changes
+| # | Change | Done when | Files |
+One row per unit of work. One line per row — never wrap a cell.
+
+## Decisions I made for you
+One line each: the choice, and the alternative rejected. Write "none" if there were none.
+
+## How it runs
+At most 4 lines total: branch/commits, gates, parallelism, what stays untouched.
+
+## Verify
+The exact commands that prove it worked.
+
+## Not doing
+Explicit out-of-scope list.
+```
+
+Budget: prose outside the tables stays under 200 words. Never restate the request back at the
+user. Anything the user has to decide goes under *Decisions I made for you* — never buried in
+prose, where it is missed.
+
+Two procedural rules:
+
+- **ExitPlanMode is the approval.** Do not ask a second confirmation question in chat before or
+  after it. Where this skill has its own approval checkpoint, that checkpoint's content becomes the
+  plan body and ExitPlanMode asks its question.
+- **On approval, resume at the phase named below** and re-run anything the read-only pass could
+  only approximate.
+<!-- /forge:shared-block plan-mode -->
+
+**Filling the plan.** *What changes* is one row per commit 0e listed, plus a row for each branch
+PHASE 3 would delete. *Decisions I made for you* carries the resolved `[BASE]` and which probe
+resolved it — guessing there merges into the wrong branch, so the user should see it. *How it runs*
+is one line: `--no-ff merge on [BASE], then git branch -d. Local only: no push, no fetch.` *Verify*
+is the ancestry check, `git merge-base --is-ancestor [BRANCH] [BASE]`.
+
+A dirty tree or a leftover worktree still stops the run at 0c/0d. Do not fold either into the plan
+as something the user will deal with later — they block the merge, and the plan cannot proceed
+around them.
+
+**On approval**, resume at PHASE 1 and run it as written.
+
 ### 0a. Resolve `[BRANCH]`
 
 If `$ARGUMENTS` names a branch, that is `[BRANCH]`. Otherwise take the current branch:

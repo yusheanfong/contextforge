@@ -71,6 +71,13 @@ Run /forge-contextmap first to build the knowledge graph, then re-run /forge-orc
 ```
 <!-- /forge:shared-block graph-hard-stop -->
 
+### 0a.1 Plan mode
+
+If you have been told to write your plan to a plan file and make no other edits, plan mode is
+active. Read [`references/plan-mode.md`](references/plan-mode.md) and follow it — it says how far
+into Phase 0 and Phase 1 you may go, what the plan file must contain, and where the run resumes on
+approval. The graph hard-stop above still applies first.
+
 ### 0b. Resolve the Python interpreter as `[PYTHON_CMD]`
 
 <!-- forge:shared-block python-cmd variant:orchestrate -->

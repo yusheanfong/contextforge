@@ -45,6 +45,10 @@ Reads `$ARGUMENTS` as the issue to diagnose.
 
 ## PHASE 0: Frame
 
+0. If you have been told to write your plan to a plan file and make no other edits, plan mode is
+   active. Read [`references/plan-mode.md`](references/plan-mode.md) and follow it — PHASE 0-5 run
+   unchanged, but it replaces PHASE 5's presentation format and defers PHASE 6's write.
+
 1. `$ARGUMENTS` is the issue. If empty, ask the user what's broken and stop until answered.
 2. Check whether `graphify-out/graph.json` exists → set `[HAS_GRAPH]`. Do not hard-stop either way.
 3. Derive `[SLUG]` from the issue: kebab-case, ≤5 words (e.g. `checkout-500-on-empty-cart`).

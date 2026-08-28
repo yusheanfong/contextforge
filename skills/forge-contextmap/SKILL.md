@@ -36,6 +36,11 @@ content preserved.
 
 Run these checks in order and jump to the matching section:
 
+0. If you have been told to write your plan to a plan file and make no other edits, plan mode is
+   active. Detect the mode below as normal, then read
+   [`references/plan-mode.md`](references/plan-mode.md) — it says how far into that mode you may go
+   and what the plan file must contain.
+
 1. If `$ARGUMENTS` contains `sync` → go to **SYNC MODE** — read [`references/sync.md`](references/sync.md) and follow it exactly
 2. If `$ARGUMENTS` contains `--new` → go to **NEW PROJECT MODE** — read [`references/new-project.md`](references/new-project.md) and follow it exactly
 3. If `doc/` exists AND contains at least one ContextForge doc (`architecture.md`,
