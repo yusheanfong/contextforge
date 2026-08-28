@@ -51,8 +51,8 @@ past 0e runs: PHASE 1 merges, PHASE 3 deletes.
 <!-- forge:shared-block plan-mode -->
 **Governing rule — the plan describes the work and the decisions, never the machinery that will
 execute it.** The machinery is whatever executes *this* plan: this skill's own stage numbers —
-whichever spelling it uses, `PHASE 3` or `STEP 1` or `0a` — plus gate names, worktrees, the
-planning council, slice scripts and subagent dispatch. None of it belongs in the plan, except as at
+whichever spelling it uses, `PHASE 3` or `STEP 1` — plus gate names, worktrees, the planning
+council, slice scripts and subagent dispatch. None of it belongs in the plan, except as at
 most one line under *How it runs*. Naming the subject matter is a different thing and stays
 allowed: a plan whose subject *is* a phased skill still names the sections it edits. A summary of
 this skill's own pipeline is not a plan — it is the wall of words the user cannot read.
