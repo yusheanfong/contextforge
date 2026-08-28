@@ -5,15 +5,23 @@ far into the detected mode you may go, and what the plan contains.
 
 <!-- forge:shared-block plan-mode -->
 **Governing rule — the plan describes the work and the decisions, never the machinery that will
-execute it.** Phase numbers, gate names, worktrees, the planning council, slice scripts and
-subagent dispatch do not belong in the plan, except as at most one line under *How it runs*. A
-summary of this skill's own pipeline is not a plan — it is the wall of words the user cannot read.
+execute it.** The machinery is whatever executes *this* plan: this skill's own stage numbers —
+whichever spelling it uses, `PHASE 3` or `STEP 1` — plus gate names, worktrees, the planning
+council, slice scripts and subagent dispatch. None of it belongs in the plan, except as at
+most one line under *How it runs*. Naming the subject matter is a different thing and stays
+allowed: a plan whose subject *is* a phased skill still names the sections it edits. A summary of
+this skill's own pipeline is not a plan — it is the wall of words the user cannot read.
 
 **These six headings are the harness's own slots, not a second set layered on top.** Where the
 plan-mode instructions ask for a Context section, a recommended approach, the critical files named,
 and a verification section: *Context* is that section, *What changes* is the approach and its
 *Files* column is the critical-files requirement, and *Verify* is the verification section. Emit
 one shape, never both — two heading sets compounding is what produces the wall of words.
+
+**The same holds for the harness's process.** Its plan workflow prescribes Explore agents and then
+a Plan agent before writing. The steps this skill just ran *are* that exploration, already scoped,
+so do not spawn those agents to repeat work already done. Where this skill states its own rule
+about subagents, outside this block, that rule governs.
 
 Write the plan file with exactly these headings, in this order:
 
@@ -38,15 +46,19 @@ The exact commands that prove it worked.
 Explicit out-of-scope list.
 ```
 
-Budget: prose outside the tables stays under 200 words. Never restate the request back at the
-user. Anything the user has to decide goes under *Decisions I made for you* — never buried in
-prose, where it is missed.
+Length: as short as it can be while staying detailed and easy to understand, and no longer. There
+is no word count — prefer a table to prose, and cut any sentence that repeats what a table already
+says, but never cut evidence or a decision to hit a length. The governing rule above already bans
+what actually makes these plans long. Never restate the request back at the user. Anything the user
+has to decide goes under *Decisions I made for you* — never buried in prose, where it is missed.
 
 Two procedural rules:
 
-- **ExitPlanMode is the approval.** Do not ask a second confirmation question in chat before or
-  after it. Where this skill has its own approval checkpoint, that checkpoint's content becomes the
-  plan body and ExitPlanMode asks its question.
+- **ExitPlanMode is the approval.** Do not ask a second confirmation question about *this plan*,
+  in chat, before or after it. Where this skill has its own checkpoint covering the same ground,
+  that checkpoint's content becomes the plan body and ExitPlanMode asks its question. A later
+  checkpoint over content the plan could not have carried — something this skill only drafts after
+  approval — is a different question and is still asked.
 - **On approval, resume at the phase named below** and re-run anything the read-only pass could
   only approximate.
 <!-- /forge:shared-block plan-mode -->
@@ -71,14 +83,18 @@ letting the user assume it was analyzed is not.
 
 - **What changes** — one row per file created or overwritten. Name them exactly; this is the whole
   value of the plan for a scaffolding command.
-- **Decisions I made for you** — the detected mode and which STEP 1 check selected it, plus every
-  answer the NEW PROJECT interview settled.
+- **Decisions I made for you** — the detected mode and what selected it (the argument given, the
+  docs already present, or the file counts), plus every answer the NEW PROJECT interview settled.
 - **How it runs** — one line naming the fence contract: `Writes only inside graphify:auto fences;
   everything outside them is left verbatim.`
-- **Not doing** — the files it will not touch: `doc/prd.md`, `doc/task-list.md`,
-  `doc/diagnosis-*.md`.
+- **Not doing** — `doc/diagnosis-*.md`, always. `doc/prd.md` and `doc/task-list.md` go here only
+  when the detected mode leaves them alone: SYNC always does, EXISTING PROJECT does when they
+  already exist. NEW PROJECT writes both and MIGRATION rewrites them, so in those two modes they
+  are *What changes* rows and listing them here contradicts the plan's own table.
 
 ## On approval
 
-Resume at the detected mode's first writing step and follow its reference file exactly. Nothing in
-the plan replaces those steps — the mode still runs in full.
+Resume at the detected mode's **first** step, not its first writing step, and follow its reference
+file exactly. The read-only prerequisites the plan pass stopped short of are still prerequisites:
+SYNC needs S1's interpreter and S1.5's CLI before S2.5's prune can run, and EXISTING PROJECT needs
+E1 before E2. Nothing in the plan replaces those steps — the mode runs in full.

@@ -41,21 +41,35 @@ code; don't retry and don't work around it.
 ### 0a.0 Plan mode
 
 If you have been told to write your plan to a plan file and make no other edits, plan mode is
-active. 0a through 0e are all read-only and run in full — resolving the branch and `[BASE]`,
-checking the tree, checking for leftover worktrees, and showing what is about to land is exactly
-the content a merge plan needs. Nothing past 0e runs: PHASE 1 merges, PHASE 3 deletes.
+active. Plan mode runs 0a through 0e with exactly one command excepted — resolving the branch and
+`[BASE]`, checking the tree, checking for leftover worktrees, and showing what is about to land is
+exactly the content a merge plan needs. The exception is 0d's first command: `git worktree
+prune` deletes stale administrative directories under `.git/worktrees`, so skip it and run `git
+worktree list` alone. The leftover-worktree check still happens; only the pruning waits — and
+because the prune exists so that a worktree already deleted from disk does not stop the run,
+ignore any listed entry whose path is gone. That is stale metadata, not a leftover worktree; only
+one whose directory is still present can hold `[BRANCH]`. Nothing past 0e runs: PHASE 1 merges,
+PHASE 3 deletes.
 
 <!-- forge:shared-block plan-mode -->
 **Governing rule — the plan describes the work and the decisions, never the machinery that will
-execute it.** Phase numbers, gate names, worktrees, the planning council, slice scripts and
-subagent dispatch do not belong in the plan, except as at most one line under *How it runs*. A
-summary of this skill's own pipeline is not a plan — it is the wall of words the user cannot read.
+execute it.** The machinery is whatever executes *this* plan: this skill's own stage numbers —
+whichever spelling it uses, `PHASE 3` or `STEP 1` — plus gate names, worktrees, the planning
+council, slice scripts and subagent dispatch. None of it belongs in the plan, except as at
+most one line under *How it runs*. Naming the subject matter is a different thing and stays
+allowed: a plan whose subject *is* a phased skill still names the sections it edits. A summary of
+this skill's own pipeline is not a plan — it is the wall of words the user cannot read.
 
 **These six headings are the harness's own slots, not a second set layered on top.** Where the
 plan-mode instructions ask for a Context section, a recommended approach, the critical files named,
 and a verification section: *Context* is that section, *What changes* is the approach and its
 *Files* column is the critical-files requirement, and *Verify* is the verification section. Emit
 one shape, never both — two heading sets compounding is what produces the wall of words.
+
+**The same holds for the harness's process.** Its plan workflow prescribes Explore agents and then
+a Plan agent before writing. The steps this skill just ran *are* that exploration, already scoped,
+so do not spawn those agents to repeat work already done. Where this skill states its own rule
+about subagents, outside this block, that rule governs.
 
 Write the plan file with exactly these headings, in this order:
 
@@ -80,21 +94,25 @@ The exact commands that prove it worked.
 Explicit out-of-scope list.
 ```
 
-Budget: prose outside the tables stays under 200 words. Never restate the request back at the
-user. Anything the user has to decide goes under *Decisions I made for you* — never buried in
-prose, where it is missed.
+Length: as short as it can be while staying detailed and easy to understand, and no longer. There
+is no word count — prefer a table to prose, and cut any sentence that repeats what a table already
+says, but never cut evidence or a decision to hit a length. The governing rule above already bans
+what actually makes these plans long. Never restate the request back at the user. Anything the user
+has to decide goes under *Decisions I made for you* — never buried in prose, where it is missed.
 
 Two procedural rules:
 
-- **ExitPlanMode is the approval.** Do not ask a second confirmation question in chat before or
-  after it. Where this skill has its own approval checkpoint, that checkpoint's content becomes the
-  plan body and ExitPlanMode asks its question.
+- **ExitPlanMode is the approval.** Do not ask a second confirmation question about *this plan*,
+  in chat, before or after it. Where this skill has its own checkpoint covering the same ground,
+  that checkpoint's content becomes the plan body and ExitPlanMode asks its question. A later
+  checkpoint over content the plan could not have carried — something this skill only drafts after
+  approval — is a different question and is still asked.
 - **On approval, resume at the phase named below** and re-run anything the read-only pass could
   only approximate.
 <!-- /forge:shared-block plan-mode -->
 
 **Filling the plan.** *What changes* is one row per commit 0e listed, plus a row for each branch
-PHASE 3 would delete. *Decisions I made for you* carries the resolved `[BASE]` and which probe
+that would be deleted. *Decisions I made for you* carries the resolved `[BASE]` and which probe
 resolved it — guessing there merges into the wrong branch, so the user should see it. *How it runs*
 is one line: `--no-ff merge on [BASE], then git branch -d. Local only: no push, no fetch.` *Verify*
 is the ancestry check, `git merge-base --is-ancestor [BRANCH] [BASE]`.

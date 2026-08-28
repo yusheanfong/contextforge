@@ -1,19 +1,29 @@
 # Plan mode — what `/forge-orchestrate` does when it may not write
 
 Read this only when plan mode is active. It replaces Phases 1b through 6 for the duration of the
-planning pass; Phase 0 still runs as written.
+planning pass, and takes part of Phase 0 with them — *What runs, and what cannot* below is the
+list. 0b and 0c are read-only and could run; they wait for approval because with the slice blocked
+nothing under plan mode consumes `[PYTHON_CMD]`.
 
 <!-- forge:shared-block plan-mode -->
 **Governing rule — the plan describes the work and the decisions, never the machinery that will
-execute it.** Phase numbers, gate names, worktrees, the planning council, slice scripts and
-subagent dispatch do not belong in the plan, except as at most one line under *How it runs*. A
-summary of this skill's own pipeline is not a plan — it is the wall of words the user cannot read.
+execute it.** The machinery is whatever executes *this* plan: this skill's own stage numbers —
+whichever spelling it uses, `PHASE 3` or `STEP 1` — plus gate names, worktrees, the planning
+council, slice scripts and subagent dispatch. None of it belongs in the plan, except as at
+most one line under *How it runs*. Naming the subject matter is a different thing and stays
+allowed: a plan whose subject *is* a phased skill still names the sections it edits. A summary of
+this skill's own pipeline is not a plan — it is the wall of words the user cannot read.
 
 **These six headings are the harness's own slots, not a second set layered on top.** Where the
 plan-mode instructions ask for a Context section, a recommended approach, the critical files named,
 and a verification section: *Context* is that section, *What changes* is the approach and its
 *Files* column is the critical-files requirement, and *Verify* is the verification section. Emit
 one shape, never both — two heading sets compounding is what produces the wall of words.
+
+**The same holds for the harness's process.** Its plan workflow prescribes Explore agents and then
+a Plan agent before writing. The steps this skill just ran *are* that exploration, already scoped,
+so do not spawn those agents to repeat work already done. Where this skill states its own rule
+about subagents, outside this block, that rule governs.
 
 Write the plan file with exactly these headings, in this order:
 
@@ -38,15 +48,19 @@ The exact commands that prove it worked.
 Explicit out-of-scope list.
 ```
 
-Budget: prose outside the tables stays under 200 words. Never restate the request back at the
-user. Anything the user has to decide goes under *Decisions I made for you* — never buried in
-prose, where it is missed.
+Length: as short as it can be while staying detailed and easy to understand, and no longer. There
+is no word count — prefer a table to prose, and cut any sentence that repeats what a table already
+says, but never cut evidence or a decision to hit a length. The governing rule above already bans
+what actually makes these plans long. Never restate the request back at the user. Anything the user
+has to decide goes under *Decisions I made for you* — never buried in prose, where it is missed.
 
 Two procedural rules:
 
-- **ExitPlanMode is the approval.** Do not ask a second confirmation question in chat before or
-  after it. Where this skill has its own approval checkpoint, that checkpoint's content becomes the
-  plan body and ExitPlanMode asks its question.
+- **ExitPlanMode is the approval.** Do not ask a second confirmation question about *this plan*,
+  in chat, before or after it. Where this skill has its own checkpoint covering the same ground,
+  that checkpoint's content becomes the plan body and ExitPlanMode asks its question. A later
+  checkpoint over content the plan could not have carried — something this skill only drafts after
+  approval — is a different question and is still asked.
 - **On approval, resume at the phase named below** and re-run anything the read-only pass could
   only approximate.
 <!-- /forge:shared-block plan-mode -->
@@ -58,7 +72,14 @@ Run, in order: **0a** (the graph hard-stop — still the cheapest stop and still
 the plan), **0f** (derive `[BRANCH]`, and only derive it: creating a branch is a write), then
 **1a**'s decomposition rules.
 
-Everything else is blocked because it writes:
+**0e's threshold under plan mode: ask only when proceeding under either reading would waste the
+run.** A fork that is real without being blocking — say, whether "without touching git" means no
+writes or no git at all — is not a question, it is a decision. Take it, and give it one line under
+*Decisions I made for you*. That is visible where the user is already reading and costs no round
+trip; a question there costs one and answers nothing the plan could not have stated.
+
+Apart from 0b and 0c, which are read-only and merely deferred, everything else is blocked because
+it writes:
 
 - **Phase 3a cannot slice.** The slice script is written to `graphify-out/.orchestrate_slice.py`
   before it runs. Under `[BACKEND] = codex` the council (1b) is blocked for the same reason — it
@@ -69,11 +90,11 @@ Everything else is blocked because it writes:
 ## Filling the plan
 
 - **What changes** is the 1a decomposition, one subtask per row. The *Files* column comes from
-  `graphify-out/GRAPH_REPORT.md` plus grep, not from a slice — so **mark that column `unsliced`**
-  and add one line under *How it runs*: `File lists are unsliced; Phase 3a re-slices
-  authoritatively before any worker is dispatched.` The hazard is the one Phase 3a already names
-  for the council's advisory slices: a list computed before the branch exists can describe a tree
-  nobody is editing.
+  `graphify-out/GRAPH_REPORT.md` plus grep, not from a slice — so **write that column's header as
+  `Files (unsliced)`**, in the header and not in every cell, and add one line under *How it runs*:
+  `File lists are estimates from the graph report; they are recomputed from the graph before any
+  code is written.` The hazard is the one Phase 3a already names for the council's advisory slices:
+  a list computed before the branch exists can describe a tree nobody is editing.
 - **Decisions I made for you** carries whatever 0e resolved, the derived branch name, and — from a
   diagnosis handoff — the §7 fix direction you adopted.
 - **How it runs**: the branch name, that it commits per subtask, `--no-commit` if set, and the
@@ -82,7 +103,7 @@ Everything else is blocked because it writes:
 
 ## On approval
 
-Resume at **0b** (resolve `[PYTHON_CMD]`), then Phase 2 onward exactly as written. Re-run 3a's
-slice for every subtask and overwrite the plan's unsliced file lists — they were an estimate, and
-Phase 3a is authoritative. Under `[BACKEND] = codex`, run the council at 1b before Phase 2: it was
-never dispatched, so nothing has critiqued this decomposition yet.
+Resume at **0b** (resolve `[PYTHON_CMD]`) and **0c**'s freshness note, then Phase 2 onward exactly
+as written. Re-run 3a's slice for every subtask and overwrite the plan's unsliced file lists —
+they were an estimate, and Phase 3a is authoritative. Under `[BACKEND] = codex`, run the council at
+1b before Phase 2: it was never dispatched, so nothing has critiqued this decomposition yet.

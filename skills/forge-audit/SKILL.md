@@ -49,20 +49,29 @@ Run /forge-contextmap first to build the knowledge graph, then re-run /forge-aud
 
 If you have been told to write your plan to a plan file and make no other edits, plan mode is
 active. The hard-stop above still applies first. Nothing past it runs: PHASE 1's scanner is a
-Python file written to disk before it is executed, so the four bloat buckets are unavailable and
+Python file written to disk before it is executed, so three of the four bloat buckets are
+unavailable — god nodes are the exception, and still read straight out of `GRAPH_REPORT.md` — and
 0c's interpreter probe has nothing to serve.
 
 <!-- forge:shared-block plan-mode -->
 **Governing rule — the plan describes the work and the decisions, never the machinery that will
-execute it.** Phase numbers, gate names, worktrees, the planning council, slice scripts and
-subagent dispatch do not belong in the plan, except as at most one line under *How it runs*. A
-summary of this skill's own pipeline is not a plan — it is the wall of words the user cannot read.
+execute it.** The machinery is whatever executes *this* plan: this skill's own stage numbers —
+whichever spelling it uses, `PHASE 3` or `STEP 1` — plus gate names, worktrees, the planning
+council, slice scripts and subagent dispatch. None of it belongs in the plan, except as at
+most one line under *How it runs*. Naming the subject matter is a different thing and stays
+allowed: a plan whose subject *is* a phased skill still names the sections it edits. A summary of
+this skill's own pipeline is not a plan — it is the wall of words the user cannot read.
 
 **These six headings are the harness's own slots, not a second set layered on top.** Where the
 plan-mode instructions ask for a Context section, a recommended approach, the critical files named,
 and a verification section: *Context* is that section, *What changes* is the approach and its
 *Files* column is the critical-files requirement, and *Verify* is the verification section. Emit
 one shape, never both — two heading sets compounding is what produces the wall of words.
+
+**The same holds for the harness's process.** Its plan workflow prescribes Explore agents and then
+a Plan agent before writing. The steps this skill just ran *are* that exploration, already scoped,
+so do not spawn those agents to repeat work already done. Where this skill states its own rule
+about subagents, outside this block, that rule governs.
 
 Write the plan file with exactly these headings, in this order:
 
@@ -87,15 +96,19 @@ The exact commands that prove it worked.
 Explicit out-of-scope list.
 ```
 
-Budget: prose outside the tables stays under 200 words. Never restate the request back at the
-user. Anything the user has to decide goes under *Decisions I made for you* — never buried in
-prose, where it is missed.
+Length: as short as it can be while staying detailed and easy to understand, and no longer. There
+is no word count — prefer a table to prose, and cut any sentence that repeats what a table already
+says, but never cut evidence or a decision to hit a length. The governing rule above already bans
+what actually makes these plans long. Never restate the request back at the user. Anything the user
+has to decide goes under *Decisions I made for you* — never buried in prose, where it is missed.
 
 Two procedural rules:
 
-- **ExitPlanMode is the approval.** Do not ask a second confirmation question in chat before or
-  after it. Where this skill has its own approval checkpoint, that checkpoint's content becomes the
-  plan body and ExitPlanMode asks its question.
+- **ExitPlanMode is the approval.** Do not ask a second confirmation question about *this plan*,
+  in chat, before or after it. Where this skill has its own checkpoint covering the same ground,
+  that checkpoint's content becomes the plan body and ExitPlanMode asks its question. A later
+  checkpoint over content the plan could not have carried — something this skill only drafts after
+  approval — is a different question and is still asked.
 - **On approval, resume at the phase named below** and re-run anything the read-only pass could
   only approximate.
 <!-- /forge:shared-block plan-mode -->
@@ -106,6 +119,11 @@ candidates and nothing more. Tag every one `[unconfirmed]`, the same tag `--grap
 uses, which means exactly "not confirmed against source." **Never present them as findings.**
 Orphans, duplicate labels and dead files cannot be computed without the scanner; say so in one line
 rather than omitting the buckets silently.
+
+This skill's epistemics are phase-shaped — the graph points, the code decides — so a plan that may
+not name its own stages has to say that split in ordinary words. Use those words: *the graph
+points, the code decides*. A *Done when* reads "the live function is read and either justified as
+central or split", never "confirmed against source in PHASE 2".
 
 *How it runs* is one line: `Report-only — never edits, never commits.` *Not doing* names the two
 standing exemptions: tests and files needed for current behavior are never delete-listed.
