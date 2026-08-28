@@ -1,7 +1,9 @@
 # Plan mode — what `/forge-orchestrate` does when it may not write
 
 Read this only when plan mode is active. It replaces Phases 1b through 6 for the duration of the
-planning pass; Phase 0 still runs as written.
+planning pass, and takes part of Phase 0 with them — *What runs, and what cannot* below is the
+list. 0b and 0c are read-only and could run; they wait for approval because with the slice blocked
+nothing under plan mode consumes `[PYTHON_CMD]`.
 
 <!-- forge:shared-block plan-mode -->
 **Governing rule — the plan describes the work and the decisions, never the machinery that will

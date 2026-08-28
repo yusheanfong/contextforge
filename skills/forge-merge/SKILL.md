@@ -41,9 +41,12 @@ code; don't retry and don't work around it.
 ### 0a.0 Plan mode
 
 If you have been told to write your plan to a plan file and make no other edits, plan mode is
-active. 0a through 0e are all read-only and run in full — resolving the branch and `[BASE]`,
-checking the tree, checking for leftover worktrees, and showing what is about to land is exactly
-the content a merge plan needs. Nothing past 0e runs: PHASE 1 merges, PHASE 3 deletes.
+active. 0a through 0e run in full and are read-only but for one command — resolving the branch
+and `[BASE]`, checking the tree, checking for leftover worktrees, and showing what is about to land
+is exactly the content a merge plan needs. The exception is 0d's first command: `git worktree
+prune` deletes stale administrative directories under `.git/worktrees`, so skip it and run `git
+worktree list` alone. The leftover-worktree check still happens; only the pruning waits. Nothing
+past 0e runs: PHASE 1 merges, PHASE 3 deletes.
 
 <!-- forge:shared-block plan-mode -->
 **Governing rule — the plan describes the work and the decisions, never the machinery that will

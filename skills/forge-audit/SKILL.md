@@ -49,7 +49,8 @@ Run /forge-contextmap first to build the knowledge graph, then re-run /forge-aud
 
 If you have been told to write your plan to a plan file and make no other edits, plan mode is
 active. The hard-stop above still applies first. Nothing past it runs: PHASE 1's scanner is a
-Python file written to disk before it is executed, so the four bloat buckets are unavailable and
+Python file written to disk before it is executed, so three of the four bloat buckets are
+unavailable — god nodes are the exception, and still read straight out of `GRAPH_REPORT.md` — and
 0c's interpreter probe has nothing to serve.
 
 <!-- forge:shared-block plan-mode -->

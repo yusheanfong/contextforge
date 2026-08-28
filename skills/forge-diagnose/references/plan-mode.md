@@ -1,7 +1,7 @@
 # Plan mode — what `/forge-diagnose` does when it may not write
 
-Read this only when plan mode is active. PHASE 0 through PHASE 5 run unchanged; this file replaces
-PHASE 5's presentation format and defers PHASE 6.
+Read this only when plan mode is active. PHASE 0 through PHASE 4 run unchanged. PHASE 5 runs too,
+but its content becomes the plan body instead of a chat checkpoint, and PHASE 6 is deferred.
 
 <!-- forge:shared-block plan-mode -->
 **Governing rule — the plan describes the work and the decisions, never the machinery that will
