@@ -72,12 +72,17 @@ do, two do not, and pretending otherwise produces a plan that says "I will run t
 |---|---|---|
 | NEW PROJECT | The interview — it is `AskUserQuestion`, which writes nothing | The scaffold file list, plus every design decision the interview settled |
 | MIGRATION | The v1 `doc/` survey — reading every file to classify it is read-only | The v1 → v2 file mapping, one row per file, naming what moves where |
-| SYNC | Nothing past detection. S1's interpreter probe is read-only, but S2.5's prune is a Python file written to disk | The fences that will be regenerated, and the bloat signal it cannot compute yet |
-| EXISTING PROJECT | Nothing past detection. The graph has to be built before E5 has anything to present | The file list it will create |
+| SYNC | Nothing past detection. S1's interpreter probe is read-only, but S2.5's prune is a Python file written to disk | The fences that will be regenerated, the bloat signal it cannot compute yet, and that S4.5 will write `doc/diagram/architecture.html` |
+| EXISTING PROJECT | Nothing past detection. The graph has to be built before E5 has anything to present | The file list it will create, including `doc/diagram/architecture.html` from E4.6 |
 
 For SYNC and EXISTING PROJECT, print one line saying the analysis needs to write and run a script,
 so the plan is a file list rather than findings. That is honest. Silently emitting a thin plan and
 letting the user assume it was analyzed is not.
+
+**The diagram render is a write, so it never happens under plan mode.** Both modes reach it — SYNC
+at S4.5, EXISTING PROJECT at E4.6 — and both must name `doc/diagram/architecture.html` in the plan
+as a file they will create, rather than rendering it. It is ~700 KB, so a user who does not want it
+versioned needs to see it coming.
 
 ## Filling the plan
 
@@ -98,3 +103,7 @@ Resume at the detected mode's **first** step, not its first writing step, and fo
 file exactly. The read-only prerequisites the plan pass stopped short of are still prerequisites:
 SYNC needs S1's interpreter and S1.5's CLI before S2.5's prune can run, and EXISTING PROJECT needs
 E1 before E2. Nothing in the plan replaces those steps — the mode runs in full.
+
+Running the mode in full includes its diagram step — S4.5 for SYNC, E4.6 for EXISTING PROJECT. An
+approved plan that named the artifact must actually produce it, or report the honest skip reason
+`diagram.md` returns.

@@ -6,7 +6,8 @@
 > Windows. That means: **no heredocs, no `cp`/`mv`/`rm`, no `mkdir -p`/`chmod`, no `2>/dev/null`, no
 > `||` chaining.** Multi-line Python goes into a file written with the **Write tool** and is run as
 > `[PYTHON_CMD] <script>.py`; file copies use the **Read + Write tools**. The only shell commands
-> left are `git …`, `graphify …`, and `[PYTHON_CMD] <script>.py`.
+> left are `git …`, `graphify …`, `[PYTHON_CMD] <script>.py`, and — in Step S4.5 only —
+> `node [ARCHIFY_DIR]/bin/archify.mjs …`.
 
 ### Step S1: Resolve the Python Interpreter
 
@@ -521,6 +522,18 @@ For each doc file that has `<!-- graphify:auto start:... -->` markers (v2 set:
    was deliberately deleted, not accidentally lost from the docs.)
 6. Write the updated file back
 
+### Step S4.5: Render the Architecture Diagram
+
+Read [`references/diagram.md`](diagram.md) and follow it. It resolves the installed Archify skill,
+fingerprints the graph, and writes `doc/diagram/architecture.html`.
+
+Run its freshness skip (D0): this is the call site that has a previous graph to compare against, so
+an unchanged graph re-uses the existing artifact instead of rewriting ~700 KB.
+
+**This step can never fail the sync.** Every failure path in `diagram.md` records a status line and
+returns. Carry that line into Step S5's report verbatim — do not soften it, and never print a
+delivered path for a run that did not deliver.
+
 ### Step S5: Report Changes
 
 Print a summary of what changed:
@@ -539,6 +552,8 @@ Docs refreshed:
 Changelog draft (doc/changelog.txt):
   [+N added, -M removed] structural changes drafted — review/edit the auto-draft block
 Tombstones: [N] removed modules marked <!-- graphify:removed --> in doc fences
+
+Diagram: [the status line Step S4.5 returned]
 
 Bloat signal: [N] orphan nodes, [M] duplicate labels, [K] god nodes, [D] dead file(s)
   → run /forge-audit for the confirmed list

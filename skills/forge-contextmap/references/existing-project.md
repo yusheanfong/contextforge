@@ -265,6 +265,17 @@ Delete `graphify-out/.forge_parse.py` once you have the output.
 Also read `graphify-out/GRAPH_REPORT.md` for the summary Graphify generated (E3's `update` step
 writes it; if it is somehow absent, carry on without it rather than stopping).
 
+### Step E4.6: Render the Architecture Diagram
+
+Read [`references/diagram.md`](diagram.md) and follow it. The graph is parsed and this is the user's
+first look at the project, which is exactly when a picture is worth most.
+
+**Skip its D0 freshness section.** There is no previous graph and no existing artifact on a first
+run, so there is nothing to compare — render unconditionally.
+
+**This step can never fail the scaffold.** Every failure path records a status line and returns.
+Carry that line into Step E5's presentation verbatim.
+
 ### Step E5: Present Understanding to User
 
 Present a structured summary. Use the information extracted in E4:
@@ -291,6 +302,8 @@ Here's what I understand about this codebase after analyzing it with Graphify:
 
 **Core Features (inferred)** — for doc/prd.md:
 [infer F1..Fn with priorities from the subsystems/screens/endpoints detected]
+
+**Diagram**: [the status line Step E4.6 returned]
 
 ---
 Does this match your understanding of the project?
@@ -568,6 +581,7 @@ Files created/updated:
   doc/design-brief.md     [only if UI]
   doc/backend-schema.md   [only if backend]
   doc/architecture.md
+  [doc/diagram/architecture.html — only if E4.6 delivered it]
   doc/domain-model.md
   doc/api-contract.md
   doc/solution-structure.md

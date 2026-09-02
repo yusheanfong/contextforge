@@ -28,12 +28,13 @@ claude plugin install contextforge@contextforge
 Then, inside your project:
 
 ```
-/forge-contextmap          # once — scaffolds doc/ + CLAUDE.md, builds the graph
+/forge-contextmap          # once — scaffolds doc/ + CLAUDE.md, builds the graph,
+                           # renders doc/diagram/architecture.html
 /forge-orchestrate         # builds the next task off doc/task-list.md, on a branch
                            # add `codex` to plan as a Claude+Codex council and execute on Codex
                            # → review the diff
 /forge-merge               # lands that branch, verifies it, deletes it
-/forge-contextmap sync     # pulls the fresh graph back into your docs
+/forge-contextmap sync     # pulls the fresh graph back into your docs + redraws the diagram
 ```
 
 Repeat the last three per task.
@@ -238,6 +239,13 @@ rm -f ~/.claude/commands/forge-*.md   # only if you ever used a pre-skill instal
 - Python 3.10+ — for existing-project analysis, `/forge-contextmap sync`, `/forge-orchestrate`, and
   `/forge-audit` (all read the graph). **Not** required for new-project scaffolding.
   `/forge-contextmap` installs Graphify automatically when it needs it.
+- Node 18+ **and** the Archify skill — only for the architecture diagram `/forge-contextmap`
+  renders. Archify ([tt-a1i/archify](https://github.com/tt-a1i/archify)) is a separate skill you
+  install yourself; ContextForge does not ship it. Three directories are probed, in order:
+  `.claude/skills/archify/` in the project, then `~/.claude/skills/archify/`, then
+  `~/.agents/skills/archify/` — so a skill-lock install is found whether or not the personal-dir
+  symlink exists. Without Node, or without Archify, the docs still sync; the diagram is skipped and
+  the reason is printed.
 - `/forge-orchestrate` and `/forge-audit` additionally need a project that has already run
   `/forge-contextmap` — they read its graph and never build it themselves.
 
@@ -249,6 +257,7 @@ The five skills share one graph and run in a loop:
 
 ```
 Setup (once)          /forge-contextmap                   → scaffold docs + build graph + post-commit hook
+                                                            + render doc/diagram/architecture.html
                       then read doc/task-list.md          → your build order, phase by phase
 
 Per task (the loop)   /forge-orchestrate                  → no args: takes the next eligible task off
@@ -256,7 +265,8 @@ Per task (the loop)   /forge-orchestrate                  → no args: takes the
                       → review the diff, then:
                       /forge-merge                        → merge the branch into main/master, verify
                                                             it fully landed, delete it
-                      /forge-contextmap sync              → refresh doc fences + print the bloat signal
+                      /forge-contextmap sync              → refresh doc fences + redraw the diagram
+                                                            + print the bloat signal
 
 Ad-hoc work           /forge-orchestrate <feature>        → same pipeline, spec typed by you
 
