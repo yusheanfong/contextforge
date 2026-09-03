@@ -29,7 +29,7 @@ Then, inside your project:
 
 ```
 /forge-contextmap          # once — scaffolds doc/ + CLAUDE.md, builds the graph,
-                           # renders doc/diagram/architecture.html
+                           # renders doc/diagram/architecture.html if Archify is installed
 /forge-orchestrate         # builds the next task off doc/task-list.md, on a branch
                            # add `codex` to plan as a Claude+Codex council and execute on Codex
                            # → review the diff
