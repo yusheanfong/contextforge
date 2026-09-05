@@ -247,7 +247,9 @@ rm -f ~/.claude/commands/forge-*.md   # only if you ever used a pre-skill instal
   `.claude/skills/archify/` in the project, then `~/.claude/skills/archify/`, then
   `~/.agents/skills/archify/` — so a skill-lock install is found whether or not the personal-dir
   symlink exists. Without Node, or without Archify, the docs still sync; the diagram is skipped and
-  the reason is printed.
+  the reason is printed. When it does render, `doc/diagram/` is added to your `.gitignore` first —
+  it is ~700 KB of generated HTML, rewritten whole on every graph change. Delete that line if you
+  want the diagram versioned.
 - `/forge-orchestrate` and `/forge-audit` additionally need a project that has already run
   `/forge-contextmap` — they read its graph and never build it themselves.
 

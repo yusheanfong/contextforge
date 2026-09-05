@@ -105,8 +105,10 @@ Preflight passed, so a render is about to be attempted. Do this before it happen
 the sync call site can take D0's freshness skip below and return without ever reaching D4, and a
 repo scaffolded before this step existed would otherwise never get the line.
 
-Read `.gitignore` at the repo root. If nothing in it already covers `doc/diagram/`, append these
-two lines with the **Write tool** (create the file if it is absent):
+Read `.gitignore` at the repo root. If nothing in it already covers `doc/diagram/`, add these two
+lines at the end of it with the **Edit tool** — read the file first and keep every existing rule.
+Use the **Write tool** only when there is no `.gitignore` at all, and then write only these two
+lines:
 
 ```
 # ContextForge architecture diagram — regenerated on every /forge-contextmap sync
