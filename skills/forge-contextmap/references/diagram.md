@@ -5,7 +5,7 @@ run:
 
 | Called from | When | Runs D0? |
 |---|---|---|
-| [`references/existing-project.md`](existing-project.md) Step E4.6 | first run on an existing project, after the graph is parsed | no — nothing to compare against |
+| [`references/existing-project.md`](existing-project.md) Step E7.5 | first run on an existing project, after the user confirms the analysis and the docs are written | no — nothing to compare against |
 | [`references/sync.md`](sync.md) Step S4.5 | every sync, after the fences are merged | yes |
 
 The output is one file, `doc/diagram/architecture.html` — a self-contained interactive page the
@@ -50,7 +50,7 @@ directories are probed, in this order, and the first whose `bin/archify.mjs` exi
 **Resolve `<home>` with `[PYTHON_CMD]`, never by writing `~` into a shell command.** `cmd` and
 PowerShell do not expand `~`, so a command containing it breaks the portability contract above.
 `[PYTHON_CMD]` is already resolved before both call sites — `sync.md` Step S1 runs before S4.5,
-`existing-project.md` Step E2.6 runs before E4.6 — so this costs nothing.
+`existing-project.md` Step E2.6 runs before E7.5 — so this costs nothing.
 
 Write this with the **Write tool** to `graphify-out/.forge_archify_probe.py`, run it, read its
 single line of output, then delete it.

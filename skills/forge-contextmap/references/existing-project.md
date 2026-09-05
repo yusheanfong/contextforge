@@ -265,17 +265,6 @@ Delete `graphify-out/.forge_parse.py` once you have the output.
 Also read `graphify-out/GRAPH_REPORT.md` for the summary Graphify generated (E3's `update` step
 writes it; if it is somehow absent, carry on without it rather than stopping).
 
-### Step E4.6: Render the Architecture Diagram
-
-Read [`references/diagram.md`](diagram.md) and follow it. The graph is parsed and this is the user's
-first look at the project, which is exactly when a picture is worth most.
-
-**Skip its D0 freshness section.** There is no previous graph and no existing artifact on a first
-run, so there is nothing to compare — render unconditionally.
-
-**This step can never fail the scaffold.** Every failure path records a status line and returns.
-Carry that line into Step E5's presentation verbatim.
-
 ### Step E5: Present Understanding to User
 
 Present a structured summary. Use the information extracted in E4:
@@ -302,8 +291,6 @@ Here's what I understand about this codebase after analyzing it with Graphify:
 
 **Core Features (inferred)** — for doc/prd.md:
 [infer F1..Fn with priorities from the subsystems/screens/endpoints detected]
-
-**Diagram**: [the status line Step E4.6 returned]
 
 ---
 Does this match your understanding of the project?
@@ -560,6 +547,23 @@ wasn't on the list. That is status bookkeeping, not a contextmap rewrite.)
 
 Create `doc/changelog.txt`, `doc/progress.txt` only if they don't exist (templates in [`references/doc-templates.md`](doc-templates.md), Files 12–13).
 
+### Step E7.5: Render the Architecture Diagram
+
+Read [`references/diagram.md`](diagram.md) and follow it.
+
+**Skip its D0 freshness section.** There is no previous graph and no existing artifact on a first
+run, so there is nothing to compare — render unconditionally.
+
+**This runs after E5, not before it, and that ordering is deliberate.** The diagram is drawn from
+the graph, so it could technically render as soon as E4 parses it — but a first run on someone
+else's codebase is exactly where the analysis might be wrong, and E5 is where they say so. Writing
+~700 KB into their repo before they have confirmed anything makes the tool presumptuous. By the
+time this step runs the user has approved the understanding and E7 has already written the doc set,
+so the diagram is one more file among many rather than the first thing to land uninvited.
+
+**This step can never fail the scaffold.** Every failure path records a status line and returns.
+Carry that line into Step E9's summary verbatim.
+
 ### Step E8: Install Post-Commit Hook
 
 Same as Step N4 in [`references/new-project.md`](new-project.md).
@@ -581,7 +585,7 @@ Files created/updated:
   doc/design-brief.md     [only if UI]
   doc/backend-schema.md   [only if backend]
   doc/architecture.md
-  [doc/diagram/architecture.html — only if E4.6 delivered it]
+  [doc/diagram/architecture.html — only if E7.5 delivered it]
   doc/domain-model.md
   doc/api-contract.md
   doc/solution-structure.md
@@ -590,6 +594,8 @@ Files created/updated:
   [doc/task-list.md — created if it didn't exist]
   doc/changelog.txt
   doc/progress.txt
+
+Diagram: [the status line Step E7.5 returned]
 
 Graph sections will auto-update whenever you run /forge-contextmap sync.
 User-owned content (outside <!-- graphify:auto --> markers) is never touched.
