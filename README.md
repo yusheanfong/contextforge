@@ -29,12 +29,14 @@ Then, inside your project:
 
 ```
 /forge-contextmap          # once — scaffolds doc/ + CLAUDE.md, builds the graph,
-                           # renders doc/diagram/architecture.html if Archify is installed
+                           # and in existing-project mode only, with Node 18+ and Archify,
+                           # renders doc/diagram/architecture.html
 /forge-orchestrate         # builds the next task off doc/task-list.md, on a branch
                            # add `codex` to plan as a Claude+Codex council and execute on Codex
                            # → review the diff
 /forge-merge               # lands that branch, verifies it, deletes it
-/forge-contextmap sync     # pulls the fresh graph back into your docs + redraws the diagram
+/forge-contextmap sync     # pulls the fresh graph back into your docs, and redraws the
+                           # diagram when Node 18+ and Archify are present
 ```
 
 Repeat the last three per task.
@@ -257,7 +259,8 @@ The five skills share one graph and run in a loop:
 
 ```
 Setup (once)          /forge-contextmap                   → scaffold docs + build graph + post-commit hook
-                                                            + render doc/diagram/architecture.html
+                                                            + existing projects, with Node 18+ and Archify:
+                                                              render doc/diagram/architecture.html
                       then read doc/task-list.md          → your build order, phase by phase
 
 Per task (the loop)   /forge-orchestrate                  → no args: takes the next eligible task off
@@ -265,8 +268,9 @@ Per task (the loop)   /forge-orchestrate                  → no args: takes the
                       → review the diff, then:
                       /forge-merge                        → merge the branch into main/master, verify
                                                             it fully landed, delete it
-                      /forge-contextmap sync              → refresh doc fences + redraw the diagram
-                                                            + print the bloat signal
+                      /forge-contextmap sync              → refresh doc fences + print the bloat signal
+                                                            + redraw the diagram when Node 18+ and
+                                                              Archify are present
 
 Ad-hoc work           /forge-orchestrate <feature>        → same pipeline, spec typed by you
 
