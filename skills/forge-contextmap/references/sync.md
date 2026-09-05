@@ -7,7 +7,8 @@
 > `||` chaining.** Multi-line Python goes into a file written with the **Write tool** and is run as
 > `[PYTHON_CMD] <script>.py`; file copies use the **Read + Write tools**. The only shell commands
 > left are `git …`, `graphify …`, `[PYTHON_CMD] <script>.py`, and — in Step S4.5 only —
-> `node [ARCHIFY_DIR]/bin/archify.mjs …`.
+> `node "[ARCHIFY_DIR]/bin/archify.mjs" …`, quoted, because that path comes from the user's home
+> directory and may contain a space.
 
 ### Step S1: Resolve the Python Interpreter
 
@@ -554,6 +555,7 @@ Changelog draft (doc/changelog.txt):
 Tombstones: [N] removed modules marked <!-- graphify:removed --> in doc fences
 
 Diagram: [the status line Step S4.5 returned]
+  .gitignore: one line appended for doc/diagram/   [omit unless S4.5 added it]
 
 Bloat signal: [N] orphan nodes, [M] duplicate labels, [K] god nodes, [D] dead file(s)
   → run /forge-audit for the confirmed list

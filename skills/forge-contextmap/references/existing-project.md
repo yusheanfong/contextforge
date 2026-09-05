@@ -554,6 +554,14 @@ Read [`references/diagram.md`](diagram.md) and follow it.
 **Skip its D0 freshness section.** There is no previous graph and no existing artifact on a first
 run, so there is nothing to compare — render unconditionally.
 
+**So this step writes no fingerprint, deliberately.** D0 is the only place the hash is computed, and
+this call site skips D0, so D4 has nothing to write. The consequence is that the first
+`/forge-contextmap sync` after a scaffold finds no `doc/diagram/.architecture.fingerprint`, cannot
+take D0's freshness skip, and re-renders once. That is accepted: one extra render after a scaffold
+is cheaper than a second copy of the fingerprint script, and every sync after it compares normally.
+Do not "fix" it by computing a hash here — a hash taken from the E3 graph is not comparable with one
+taken from the pruned graph S2.5 hands D0.
+
 **This runs after E5, not before it, and that ordering is deliberate.** The diagram is drawn from
 the graph, so it could technically render as soon as E4 parses it — but a first run on someone
 else's codebase is exactly where the analysis might be wrong, and E5 is where they say so. Writing
@@ -594,6 +602,7 @@ Files created/updated:
   [doc/task-list.md — created if it didn't exist]
   doc/changelog.txt
   doc/progress.txt
+  [.gitignore — one appended line, only if E7.5 reached its render]
 
 Diagram: [the status line Step E7.5 returned]
 

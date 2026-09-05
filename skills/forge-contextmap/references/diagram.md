@@ -12,9 +12,9 @@ The output is one file, `doc/diagram/architecture.html` — a self-contained int
 user opens in a browser. No server, no assets directory, no build.
 
 > **Portability contract.** Same as `sync.md`'s, with one addition: this step may run
-> `node [ARCHIFY_DIR]/bin/archify.mjs …`. Still **no heredocs, no `cp`/`mv`/`rm`, no `mkdir -p`/
-> `chmod`, no `2>/dev/null`, no `||` chaining.** Multi-line Python goes into a file written with the
-> **Write tool** and is run as `[PYTHON_CMD] <script>.py`.
+> `node "[ARCHIFY_DIR]/bin/archify.mjs" …` — quoted, always. Still **no heredocs, no `cp`/`mv`/`rm`,
+> no `mkdir -p`/`chmod`, no `2>/dev/null`, no `||` chaining.** Multi-line Python goes into a file
+> written with the **Write tool** and is run as `[PYTHON_CMD] <script>.py`.
 
 **Nothing here may fail the caller — no exceptions.** Every step below ends in a recorded status
 line and a return. That includes the steps that run a script of your own: if the fingerprint script
@@ -34,7 +34,8 @@ node --version
 ```
 
 Absent, or below v18: record `Diagram: skipped — Node >= 18 not found (found <version>)` and return.
-Do not attempt an install; that is the user's environment.
+When the command did not run at all there is no version to report — write `(not installed)` there,
+not an empty pair of brackets. Do not attempt an install; that is the user's environment.
 
 ### Resolving `[ARCHIFY_DIR]`
 
@@ -80,6 +81,12 @@ for d in candidates:
 `/bin/archify.mjs` to it, so never store the `.mjs` path itself. Empty output, or a non-zero exit:
 record `Diagram: skipped — archify skill not installed` and return.
 
+**Quote it every time you interpolate it: `node "[ARCHIFY_DIR]/bin/archify.mjs" …`, never the bare
+form.** The probe prints a real home directory, and a space in one — `C:\Users\Yu Shean\…` is
+ordinary on Windows — splits the path into two arguments in `cmd` and PowerShell. The failure is
+worse than a break: `node` gets a truncated path, the command exits non-zero, and the user is told
+`archify doctor failed` about a perfectly good install.
+
 **An Archify installed as a plugin is deliberately not probed for.** Its path
 (`~/.claude/plugins/cache/<marketplace>/<plugin>/<sha>/…`) is keyed by commit and several SHAs
 coexist — three on the machine this was written on. Dead ones are marked `.orphaned_at`, but relying
@@ -87,7 +94,7 @@ on an undocumented internal marker to pick the live one is worse than not guessi
 silently runs a stale bundle. Three misses is a skip, not a wider search.
 
 ```bash
-node [ARCHIFY_DIR]/bin/archify.mjs doctor
+node "[ARCHIFY_DIR]/bin/archify.mjs" doctor
 ```
 
 Non-zero exit: record `Diagram: skipped — archify doctor failed`, include its last line, and return.
@@ -107,8 +114,10 @@ repo scaffolded before this step existed would otherwise never get the line.
 
 Read `.gitignore` at the repo root. If nothing in it already covers `doc/diagram/`, add these two
 lines at the end of it with the **Edit tool** — read the file first and keep every existing rule.
-Use the **Write tool** only when there is no `.gitignore` at all, and then write only these two
-lines:
+**Anchor the edit on the last non-empty line and append after it**; the Edit tool needs a unique
+match, and a file ending in blank lines or repeated entries gives you none. If no unique anchor
+exists, carry on to the render and say nothing. Use the **Write tool** only when there is no
+`.gitignore` at all, and then write only these two lines:
 
 ```
 # ContextForge architecture diagram — regenerated on every /forge-contextmap sync
@@ -116,7 +125,10 @@ doc/diagram/
 ```
 
 `doc/diagram/`, `doc/diagram` and a blanket `doc/` all already cover it — recognise those and do
-not add a duplicate. If there is no `.git` directory, skip this entirely and render anyway.
+not add a duplicate. If there is no `.git` **entry** at the repo root, skip this entirely and render
+anyway — test for either kind, because in a linked worktree or a submodule `.git` is a *file*
+holding a `gitdir:` pointer, not a directory, and `/forge-orchestrate`'s worktree mode puts users in
+exactly that layout.
 
 **The default runs this way because the file is generated output**, rewritten in full whenever the
 graph changes, ~700 KB a time. A user who wants it versioned deletes the line; a user who does not
@@ -137,8 +149,8 @@ picture with no signal. Measured: changing one edge's `relation` leaves S3.5 rep
 `added=0 removed=0`, while the fingerprint below changes.
 
 Write this with the **Write tool** to `graphify-out/.forge_diagram_fp.py`, run it, read its output,
-then delete it. **If it exits non-zero, record `Diagram: skipped — fingerprint failed` and return**
-— do not fall through to a render on an unknown state.
+then delete it. **If it exits non-zero, record `Diagram: skipped — fingerprint failed`, delete it
+anyway, and return** — do not fall through to a render on an unknown state.
 
 ```python
 """Fingerprint the graph fields the diagram is built from. Stdlib + networkx."""
@@ -250,11 +262,13 @@ Set `meta.title` from the repository directory name and `meta.quality_profile` t
 
 **Say what the diagram actually shows.** Where the graph's edges are heading containment rather than
 code references — a documentation corpus — this is *heading topology*, not runtime architecture. Say
-so in `meta.title` and never manufacture connections to make it look connected. A repo whose graph
+so in **`meta.subtitle`**, an optional string, and leave `meta.title` as the directory name — one
+instruction per field. Never manufacture connections to make it look connected. A repo whose graph
 has no cross-file edges legitimately renders as unconnected components. That is information.
 
 Write it with the **Write tool** to `graphify-out/.forge_diagram_spec.json`. If building it raises,
-record `Diagram: skipped — spec build failed` and return.
+record `Diagram: skipped — spec build failed`, delete that file, and return — this return is above
+D5, so its cleanup line never runs for you.
 
 ## D3. Add connections, bounded, with the base spec as the floor
 
@@ -269,7 +283,7 @@ inventory, and density is what crashes the renderer.
 Then iterate, following `[ARCHIFY_DIR]/SKILL.md`'s repair order:
 
 ```bash
-node [ARCHIFY_DIR]/bin/archify.mjs validate architecture graphify-out/.forge_diagram_spec.json --quality showcase --json
+node "[ARCHIFY_DIR]/bin/archify.mjs" validate architecture graphify-out/.forge_diagram_spec.json --quality showcase --json
 ```
 
 **Read the result from the right fields, because there are two different shapes.**
@@ -296,7 +310,7 @@ clean-flow checks are not quality-gated, and `standard` fails identically.
 ## D4. Deliver
 
 ```bash
-node [ARCHIFY_DIR]/bin/archify.mjs deliver architecture graphify-out/.forge_diagram_spec.json doc/diagram/architecture.html --quality showcase --json
+node "[ARCHIFY_DIR]/bin/archify.mjs" deliver architecture graphify-out/.forge_diagram_spec.json doc/diagram/architecture.html --quality showcase --json
 ```
 
 `deliver` **creates missing parent directories itself** — verified two levels deep. No `mkdir` is
@@ -304,7 +318,9 @@ needed, which is what keeps this inside the portability contract.
 
 On success it reports `validation.checksPassed` / `checkCount` (9/9 for showcase), `errors`,
 `warnings`, `artifact.bytes` and a SHA-256. Record
-`Diagram: doc/diagram/architecture.html (9/9 checks, N bytes)` and write D0's fingerprint.
+`Diagram: doc/diagram/architecture.html (9/9 checks, N bytes)`, and **write D0's fingerprint only if
+D0 ran**. D0 is the sole place the hash is computed, so at the existing-project call site — which
+skips D0 — there is nothing to write and nothing is written.
 
 **A non-zero exit is a delivery failure and needs its own state.** Never infer success from the
 output file existing — a previous run's artifact sits at that path and would read as a pass. On
@@ -328,6 +344,7 @@ Diagram: doc/diagram/architecture.html (9/9 checks, 705,746 bytes)
 Diagram: doc/diagram/architecture.html (9/9 checks, 705,746 bytes) (connections omitted — routing unresolved)
 Diagram: unchanged
 Diagram: skipped — Node >= 18 not found (found v16.20.0)
+Diagram: skipped — Node >= 18 not found (not installed)
 Diagram: skipped — archify skill not installed
 Diagram: skipped — archify doctor failed: <last line>
 Diagram: skipped — fingerprint failed
@@ -337,4 +354,6 @@ Diagram: deliver failed — no artifact
 ```
 
 Delete `graphify-out/.forge_diagram_spec.json`, `graphify-out/.forge_diagram_fp.py` and
-`graphify-out/.forge_archify_probe.py` on every path out, including every failure path.
+`graphify-out/.forge_archify_probe.py` on every path out, including every failure path. The returns
+above never reach this section, so each one carries its own delete — this line is the rule they
+follow, not the only place it happens.

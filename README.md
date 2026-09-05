@@ -241,15 +241,20 @@ rm -f ~/.claude/commands/forge-*.md   # only if you ever used a pre-skill instal
 - Python 3.10+ — for existing-project analysis, `/forge-contextmap sync`, `/forge-orchestrate`, and
   `/forge-audit` (all read the graph). **Not** required for new-project scaffolding.
   `/forge-contextmap` installs Graphify automatically when it needs it.
-- Node 18+ **and** the Archify skill — only for the architecture diagram `/forge-contextmap`
-  renders. Archify ([tt-a1i/archify](https://github.com/tt-a1i/archify)) is a separate skill you
-  install yourself; ContextForge does not ship it. Three directories are probed, in order:
-  `.claude/skills/archify/` in the project, then `~/.claude/skills/archify/`, then
-  `~/.agents/skills/archify/` — so a skill-lock install is found whether or not the personal-dir
-  symlink exists. Without Node, or without Archify, the docs still sync; the diagram is skipped and
-  the reason is printed. When it does render, `doc/diagram/` is added to your `.gitignore` first —
-  it is ~700 KB of generated HTML, rewritten whole on every graph change. Delete that line if you
-  want the diagram versioned.
+- Node 18+ **and** the Archify skill — only for the architecture diagram, and only in the two modes
+  that draw one: existing-project scaffolding and `sync`. A new-project scaffold and a v1 migration
+  render nothing even with both installed. Archify
+  ([tt-a1i/archify](https://github.com/tt-a1i/archify)) is a separate skill you install yourself;
+  ContextForge does not ship it. Three directories are probed, in order: `.claude/skills/archify/`
+  in the project, then `~/.claude/skills/archify/`, then `~/.agents/skills/archify/` — so a
+  skill-lock install is found whether or not the personal-dir symlink exists. Without Node, or
+  without Archify, the docs still sync; the diagram is skipped and the reason is printed. Once the
+  preflight passes — Node, the installed skill, and its own `archify doctor` all clear —
+  `doc/diagram/` is appended to your `.gitignore` before the render is attempted, including on runs
+  that then skip the render as unchanged or fail it, because the artifact is
+  ~700 KB of generated HTML, rewritten whole on every graph change. Nothing already in your
+  `.gitignore` is edited, and a `doc/` or `doc/diagram/` rule already there is left alone. Delete
+  that line if you want the diagram versioned.
 - `/forge-orchestrate` and `/forge-audit` additionally need a project that has already run
   `/forge-contextmap` — they read its graph and never build it themselves.
 
@@ -284,7 +289,7 @@ Periodic / on-demand  /forge-audit                        → whole-repo bloat s
 
 | Command | Use it when | Writes | Git |
 |---------|-------------|--------|-----|
-| `/forge-contextmap` | Starting out, or refreshing docs after code changes (`sync`) | `doc/*`, `graph.json`, post-commit hook | never commits |
+| `/forge-contextmap` | Starting out, or refreshing docs after code changes (`sync`) | `doc/*`, `graph.json`, post-commit hook, one appended `.gitignore` line when it draws the diagram | never commits |
 | `/forge-orchestrate <feature>` | Building a new feature end-to-end | code + tests, `release-readiness.md`, progress/changelog | commits per subtask on a branch (opt out with `--no-commit`) |
 | `/forge-merge [branch]` | You've reviewed an orchestrate branch and want it landed | nothing | one merge commit on `main`/`master`, then deletes the branch — never pushes |
 | `/forge-audit [path]` | Cleaning up accumulated bloat, before a refactor or release | nothing (report-only) | never commits |
@@ -384,7 +389,8 @@ Flow:
 5. Asks: *"Does this match your understanding? What should I add or correct?"* — including an inferred core-feature list that becomes your PRD
 6. If UI code is detected: extracts your existing theme/tokens (or asks the vibe question) → concrete design brief
 7. Applies your corrections, then populates all doc files (backend schema included when backend code is detected)
-8. Installs the post-commit hook
+8. Renders `doc/diagram/architecture.html` — only with Node 18+ and the Archify skill installed; otherwise it prints why it skipped and carries on
+9. Installs the post-commit hook
 
 #### Scope the corpus first: `.graphifyignore`
 
@@ -433,8 +439,9 @@ Flow:
 2. Refreshes only the `<!-- graphify:auto -->` fenced sections in doc files
 3. Preserves everything outside the fences — always
 4. Auto-drafts structural `changelog.txt` entries from added/removed graph nodes (marked as editable drafts — keep, edit, or delete)
-5. Prints a summary of what changed
-6. Tombstones deleted modules: `<!-- graphify:removed: ModuleName (last seen: YYYY-MM-DD) -->`
+5. Redraws `doc/diagram/architecture.html` when Node 18+ and Archify are present — and skips the rewrite entirely when the graph fingerprint is unchanged
+6. Prints a summary of what changed
+7. Tombstones deleted modules: `<!-- graphify:removed: ModuleName (last seen: YYYY-MM-DD) -->`
 
 ---
 

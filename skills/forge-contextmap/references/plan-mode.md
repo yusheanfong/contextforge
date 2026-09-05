@@ -85,6 +85,14 @@ as a file they will create, rather than rendering it. Name `.gitignore` alongsid
 Step D1.5 appends `doc/diagram/` to it before rendering, so running in full edits a file the user
 very likely tracks.
 
+**Mark that one row conditional, and only that one.** Several gates can withhold the artifact —
+missing Node 18+, missing Archify, a failing `archify doctor`, a failed spec build, a failed
+deliver — so the row names none of them and reads
+`doc/diagram/architecture.html — or a printed skip reason, if the render does not happen`. Naming
+two of the five would promise the other three away. The `.gitignore` row needs no hedge at all: it
+is attempted as soon as preflight passes, ahead of the later gates. Every other row in the table
+stays a flat statement — hedging rows that are not conditional is what makes a plan unreadable.
+
 ## Filling the plan
 
 - **What changes** — one row per file created or overwritten. Name them exactly; this is the whole
@@ -105,6 +113,4 @@ file exactly. The read-only prerequisites the plan pass stopped short of are sti
 SYNC needs S1's interpreter and S1.5's CLI before S2.5's prune can run, and EXISTING PROJECT needs
 E1 before E2. Nothing in the plan replaces those steps — the mode runs in full.
 
-Running the mode in full includes its diagram step — S4.5 for SYNC, E7.5 for EXISTING PROJECT. An
-approved plan that named the artifact must actually produce it, or report the honest skip reason
-`diagram.md` returns.
+Running the mode in full includes its diagram step — S4.5 for SYNC, E7.5 for EXISTING PROJECT.
