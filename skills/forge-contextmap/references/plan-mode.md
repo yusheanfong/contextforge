@@ -81,8 +81,9 @@ letting the user assume it was analyzed is not.
 
 **The diagram render is a write, so it never happens under plan mode.** Both modes reach it — SYNC
 at S4.5, EXISTING PROJECT at E4.6 — and both must name `doc/diagram/architecture.html` in the plan
-as a file they will create, rather than rendering it. It is ~700 KB, so a user who does not want it
-versioned needs to see it coming.
+as a file they will create, rather than rendering it. Name `.gitignore` alongside it: `diagram.md`
+Step D1.5 appends `doc/diagram/` to it before rendering, so running in full edits a file the user
+very likely tracks.
 
 ## Filling the plan
 

@@ -99,6 +99,30 @@ network request and binds no port.* Specifically, never `check-update` — the i
 instruction here — never `brands capture` (outbound request), and never `preview` (binds a local
 server).
 
+## D1.5. Keep the artifact out of git by default
+
+Preflight passed, so a render is about to be attempted. Do this before it happens, not after —
+the sync call site can take D0's freshness skip below and return without ever reaching D4, and a
+repo scaffolded before this step existed would otherwise never get the line.
+
+Read `.gitignore` at the repo root. If nothing in it already covers `doc/diagram/`, append these
+two lines with the **Write tool** (create the file if it is absent):
+
+```
+# ContextForge architecture diagram — regenerated on every /forge-contextmap sync
+doc/diagram/
+```
+
+`doc/diagram/`, `doc/diagram` and a blanket `doc/` all already cover it — recognise those and do
+not add a duplicate. If there is no `.git` directory, skip this entirely and render anyway.
+
+**The default runs this way because the file is generated output**, rewritten in full whenever the
+graph changes, ~700 KB a time. A user who wants it versioned deletes the line; a user who does not
+would otherwise have to notice a 700 KB blob in their first `git status` after every sync.
+
+**This step can never fail the render.** If `.gitignore` cannot be read or written, carry on to the
+render and say nothing about it — an unignored diagram is a smaller problem than no diagram.
+
 ## D0. Freshness skip — sync call site only
 
 *Skip this section entirely at the existing-project call site: there is no previous graph and no
