@@ -246,8 +246,9 @@ existing failure paths.
 
 The transform — deterministic, so the same graph yields a byte-identical spec:
 
-1. **Roll up to one component per `source_file`.** Sort by node count descending, then by path
-   ascending. Take at most **12**. Every tie breaks on the path string, never on dict order.
+1. **Roll up to one component per `source_file`**, skipping any node whose `source_file` is empty
+   or missing. Sort by node count descending, then by path ascending. Take at most **12**. Every tie
+   breaks on the path string, never on dict order.
 2. **`id`**: lowercase the path, replace every character outside `[a-z0-9]` with `-`, collapse runs
    of `-`, strip leading and trailing `-`. If the result is empty or does not start with a letter,
    prefix `n-`. If two paths collide, append `-2`, `-3`, … in the sorted order from step 1.
@@ -262,6 +263,14 @@ The transform — deterministic, so the same graph yields a byte-identical spec:
    `row = i / 3`, `col = i % 3`, both 0-indexed.
 6. **`connections`** is `[]`. **No `boundaries`.** A boundary needs a `kind` and a defensible
    grouping; the graph gives neither, and inventing one is worse than omitting it.
+
+**A node with no `source_file` is not a file.** Graphify mints those for symbols the repo
+references but does not define — a stdlib base class, an imported library type. Rolled up, the empty
+path becomes its own component: step 2's empty-string branch yields the id `n-` and `Path('').stem`
+yields an empty `label`, which archify rejects with `schema/minLength`. D3 cannot repair it — the
+repair loop only moves or drops connections — and its fallback to this base spec fails identically.
+If no node survives the exclusion there are no components at all, and `components` carries
+`minItems: 1`: that is the spec-build-failure branch below.
 
 Set `meta.title` from the repository directory name and `meta.quality_profile` to `"showcase"`.
 
