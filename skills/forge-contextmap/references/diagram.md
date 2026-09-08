@@ -97,7 +97,10 @@ silently runs a stale bundle. Three misses is a skip, not a wider search.
 node "[ARCHIFY_DIR]/bin/archify.mjs" doctor
 ```
 
-Non-zero exit: record `Diagram: skipped — archify doctor failed`, include its last line, and return.
+Non-zero exit: record `Diagram: skipped — archify doctor failed`, include the verdict line — the
+last line of **stderr**, e.g. `Archify is not ready: 5 required files missing.` — and return. Do not
+take the last line of stdout: that is the final `[missing] …` row, which names one file rather than
+the verdict.
 
 **Run only `doctor`, `validate` and `deliver`. Never any other subcommand — this is a flat
 prohibition, not a default to be overridden.** The reason is simple: *a documentation sync makes no
@@ -215,8 +218,9 @@ rules into this file.
 **Why components-only first.** Archify rejects a spec whose connection routing is unclean —
 `clean-flow/edge-through-node` fires when a connection crosses an unrelated component box, and a
 grid layout produces exactly that whenever two connected components are not neighbours. There is no
-fixed formula that assigns sides correctly for an arbitrary graph; a blanket rule was measured
-failing at every density from 8 connections upward, and a dense spec crashes the renderer outright
+fixed formula that assigns sides correctly for an arbitrary graph; what breaks routing is span, not
+count — on a 12-component grid a *single* connection whose endpoints are more than one grid step
+apart already fails — and a dense spec crashes the renderer outright
 (`internal/unclassified`, "Renderer failed before emitting a structured diagnostic"). So the base
 spec carries **no connections**, which is proven to render at 3, 7 and 12 components (9/9 checks,
 0 errors, 0 warnings). D3 adds connections on top and can always fall back to this.
@@ -225,8 +229,9 @@ Schema facts, already established — do not re-derive them. Every hard number i
 verified against **archify 2.16.0**; a different installed version is carried by D3's and D4's
 existing failure paths.
 
-- `"schema_version": 1` — **the integer 1**, not `"1"` and not `1.0`. It is a const; anything else
-  fails with `/schema_version must be equal to constant`.
+- `"schema_version": 1` — **the integer 1**, never the string `"1"`, which fails with
+  `/schema_version must be equal to constant`. (`1.0` happens to validate — a JSON const compares
+  numerically — but author the bare integer.)
 - Required top-level: `schema_version`, `diagram_type`, `meta`, `components`.
 - Required per component: `id`, `type`, `label`. `pos` and `size` are **optional** — never author
   coordinates.
@@ -286,21 +291,28 @@ Then iterate, following `[ARCHIFY_DIR]/SKILL.md`'s repair order:
 node "[ARCHIFY_DIR]/bin/archify.mjs" validate architecture graphify-out/.forge_diagram_spec.json --quality showcase --json
 ```
 
-**Read the result from the right fields, because there are two different shapes.**
+**Read the result from the right fields. There are two shapes, and `composition` is what separates
+them: it is present only on a pass.**
 
 | Outcome | How to detect it |
 |---|---|
 | clean | `ok: true`, `composition.status: "pass"`, `composition.summary.errors` and `.warnings` both 0 |
-| schema/composition problem | `ok: false` **with** a `composition` object |
-| render-stage failure | `ok: false`, `stage: "render"`, and **no `composition` key at all** — read `diagnostics[]` and `error` instead |
+| any failure | `ok: false`, **no `composition` key at all** — read `diagnostics[]` and `error` instead |
+
+**Every failure class lands in that second row** — measured against 2.16.0 across schema errors,
+layout errors (`col == cols`), clean-flow routing errors, label-density errors and the renderer
+crash. All five carry `stage: "render"`; a `deliver` that cannot write its output path carries
+`stage: "prepare"`. Never
+branch on `stage`, and never look for `composition.summary.errors` on a failure: it is not there.
 
 Never look for `checksPassed` here; that field belongs to `deliver`'s output and its absence in
 `validate` reads as a pass.
 
 Repair only the subject a diagnostic names — `clean-flow/edge-through-node` and
 `clean-flow/endpoint-side-direction` are fixed by setting that connection's `fromSide`/`toSide`, or
-by dropping that connection. **Bound the loop by the diagnostic count**, which exists in both failure
-shapes, rather than by error/warning counts, which do not exist on a render-stage failure.
+by dropping that connection. **Bound the loop by the diagnostic count**, which is present on every
+failure, rather than by error/warning counts, which live under `composition` and so are absent
+whenever validation fails.
 
 **Stop after 2 rounds that do not reduce the diagnostic count.** Then discard the connections, keep
 the D2 base spec, and carry the note `(connections omitted — routing unresolved)` into the status
@@ -346,7 +358,7 @@ Diagram: unchanged
 Diagram: skipped — Node >= 18 not found (found v16.20.0)
 Diagram: skipped — Node >= 18 not found (not installed)
 Diagram: skipped — archify skill not installed
-Diagram: skipped — archify doctor failed: <last line>
+Diagram: skipped — archify doctor failed: <verdict line>
 Diagram: skipped — fingerprint failed
 Diagram: skipped — spec build failed
 Diagram: deliver failed — previous artifact retained (last delivered 2026-08-30)
