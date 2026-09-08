@@ -16,8 +16,13 @@ content preserved.
 
 ## CONTRACT (non-negotiable guarantees)
 
-- Sync writes ONLY inside `<!-- graphify:auto start/end -->` fences; content outside fences is
-  never touched.
+- Sync never edits or deletes a line you wrote. Inside `<!-- graphify:auto start/end -->` fences it
+  regenerates freely; outside them it only ever **appends**, in exactly two places — a
+  clearly-marked draft block at the end of `doc/changelog.txt`
+  ([`references/sync.md`](references/sync.md) Step S3.5), and one `doc/diagram/` line at the end of
+  `.gitignore` ([`references/diagram.md`](references/diagram.md) Step D1.5, only when a render is
+  attempted and nothing already covers that path). The one unfenced file it rewrites whole is
+  `doc/diagram/architecture.html`, which it generated. All three are named in the S5 summary.
 - `/forge-contextmap` never rewrites `doc/task-list.md` content — it's user-authored.
   (`/forge-orchestrate`'s status ticks are the sole exception.)
 - `/forge-contextmap` never rewrites or deletes `doc/diagnosis-*.md` — written by
