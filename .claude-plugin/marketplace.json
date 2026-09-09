@@ -4,12 +4,12 @@
     "name": "Fong Yu Shean",
     "url": "https://github.com/yusheanfong"
   },
-  "description": "Five Claude Code skills that share one live knowledge graph: scaffold docs, execute features, land branches, audit for bloat, diagnose bugs.",
+  "description": "Six Claude Code skills that share one live knowledge graph: scaffold docs, execute features, land branches, audit for bloat, diagnose bugs, catch up in plain English.",
   "plugins": [
     {
       "name": "contextforge",
       "source": "./",
-      "description": "Graph-powered context scaffold, feature orchestrator, branch merger, over-engineering audit, and root-cause diagnosis — five skills reading one knowledge graph."
+      "description": "Graph-powered context scaffold, feature orchestrator, branch merger, over-engineering audit, root-cause diagnosis, and plain-English catch-up — six skills reading one knowledge graph."
     }
   ]
 }
