@@ -1,6 +1,6 @@
 ---
 name: forge-summary
-description: Plain-English catch-up in two modes (/forge-summary). `session` — the default — recaps what THIS session has done, what is next, and what is still open, checked against git and doc/. `project` explains what the codebase is, from its README, docs and graph. Report-only: never writes, never commits, never judges the code. Triggers include "/forge-summary", "/forge-summary project", "catch me up", "where are we", "recap this session", "what have we done so far", "summarize what we did", "what is this codebase", "explain this repo".
+description: Plain-English catch-up in two modes (/forge-summary). `session` — the default — recaps what THIS session has done, what is next, and what is still open, checked against git and doc/. `project` explains what the codebase is, from its README, docs and graph. Report-only — never writes, never commits, never judges the code. Triggers include "/forge-summary", "/forge-summary project", "catch me up", "where are we", "recap this session", "what have we done so far", "summarize what we did", "what is this codebase", "explain this repo".
 argument-hint: "[session | project]"
 allowed-tools: Read, Grep, Glob, Bash
 ---
