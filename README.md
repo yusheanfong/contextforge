@@ -1,6 +1,6 @@
 # ContextForge
 
-Five Claude Code skills that share one live knowledge graph: scaffold the workflow, execute features against it, land them, sweep it for bloat, and diagnose what breaks — all reading the same map of your codebase.
+Six Claude Code skills that share one live knowledge graph: scaffold the workflow, execute features against it, land them, sweep it for bloat, diagnose what breaks, and catch up in plain English — all reading the same map of your codebase.
 
 ```
 /forge-contextmap   → scaffold docs + build the graph   (start here)
@@ -8,11 +8,12 @@ Five Claude Code skills that share one live knowledge graph: scaffold the workfl
 /forge-merge        → land the verified branch, prove it landed, delete it
 /forge-audit        → sweep the repo for over-engineering
 /forge-diagnose     → find root cause, change nothing, hand off
+/forge-summary      → plain-English catch-up: this session, or this codebase
 ```
 
 `/forge-contextmap` is the entry point: it builds the graph. `/forge-orchestrate` and `/forge-audit` hard-stop until it has.
 
-The other two run without it. `/forge-diagnose` uses the graph when present and greps when not, so a bug is never blocked behind a graph build. `/forge-merge` reasons about git refs rather than code, so it runs in any git repo.
+The other three run without it. `/forge-diagnose` uses the graph when present and greps when not, so a bug is never blocked behind a graph build. `/forge-merge` reasons about git refs rather than code, so it runs in any git repo. `/forge-summary` only reads and explains, so it runs anywhere — including a repo ContextForge has never touched.
 
 ---
 
@@ -37,9 +38,11 @@ Then, inside your project:
 /forge-merge               # lands that branch, verifies it, deletes it
 /forge-contextmap sync     # pulls the fresh graph back into your docs, and redraws the
                            # diagram when Node 18+ and Archify are present
+/forge-summary             # lost the thread? plain-English recap of this session
+                           # add `project` for what the codebase is, instead
 ```
 
-Repeat the last three per task.
+Repeat the middle three per task.
 
 A plugin install namespaces these as `/contextforge:forge-…`, so the bare names above won't
 autocomplete — see [Names are namespaced](#install-as-a-plugin-recommended). Asking by intent works
@@ -54,12 +57,13 @@ either way. Prefer copying files over a plugin install? See
 - [What It Does](#what-it-does)
 - [Install](#install) — [plugin](#install-as-a-plugin-recommended) · [manual](#manual-install-copy-the-skills) · [requirements](#requirements)
 - [The Loop](#the-loop)
-- [The Five Skills](#the-five-skills)
+- [The Six Skills](#the-six-skills)
   - [/forge-contextmap — Scaffold the Docs, Build the Map](#forge-contextmap--scaffold-the-docs-build-the-map)
   - [/forge-orchestrate — Execute With the Map](#forge-orchestrate--execute-with-the-map)
   - [/forge-merge — Land It and Clean Up](#forge-merge--land-it-and-clean-up)
   - [/forge-audit — Sweep for Over-Engineering](#forge-audit--sweep-for-over-engineering)
   - [/forge-diagnose — Find the Root Cause, Hand It Off](#forge-diagnose--find-the-root-cause-hand-it-off)
+  - [/forge-summary — Catch Up in Plain English](#forge-summary--catch-up-in-plain-english)
   - [Flags](#flags) · [When it stops vs. runs hands-off](#when-it-stops-vs-runs-hands-off)
 - [What Gets Created](#what-gets-created)
 - [How It Works](#how-it-works)
@@ -71,13 +75,13 @@ either way. Prefer copying files over a plugin install? See
 
 Claude Code starts every session cold. It reads `CLAUDE.md` (auto-loaded, ~600 tokens) to know what it's building. Generic placeholders mean generic decisions.
 
-ContextForge replaces those placeholders with architecture extracted from your actual code. Five workflows — scaffold, execute, land, audit, diagnose — then read from that same extracted map, instead of from whatever happens to be in the session's context window.
+ContextForge replaces those placeholders with architecture extracted from your actual code. Six workflows — scaffold, execute, land, audit, diagnose, catch up — then read from that same extracted map, instead of from whatever happens to be in the session's context window.
 
 ---
 
 ## Install
 
-All five are packaged as **skills**: a thin `SKILL.md` plus `references/` files loaded only on the
+All six are packaged as **skills**: a thin `SKILL.md` plus `references/` files loaded only on the
 branch that needs them. That is progressive disclosure — a single-tree run never reads the worktree
 instructions, and a project with no task list never reads the tick rules.
 
@@ -103,7 +107,7 @@ claude plugin install contextforge@contextforge
 Or the same two inside a Claude Code session, as `/plugin marketplace add …` and
 `/plugin install contextforge@contextforge`.
 
-All five skills arrive together, in every project, and stay in sync with this repo — see
+All six skills arrive together, in every project, and stay in sync with this repo — see
 [Updating](#updating).
 
 The shorthand `yusheanfong/contextforge` also works in place of the URL, but it clones over **SSH**
@@ -118,6 +122,7 @@ by default, so it fails without a GitHub SSH key. Use the full HTTPS URL above, 
 /contextforge:forge-merge
 /contextforge:forge-audit
 /contextforge:forge-diagnose
+/contextforge:forge-summary
 ```
 
 Bare `/forge-audit` won't autocomplete after a plugin install. Intent still works — "sweep this repo
@@ -126,7 +131,7 @@ themselves say "run `/forge-contextmap` first", they mean `/contextforge:forge-c
 
 ### Manual install (copy the skills)
 
-No plugin system involved — the five skill directories are plain files.
+No plugin system involved — the six skill directories are plain files.
 
 **Global** — available in all projects:
 
@@ -154,7 +159,7 @@ Copied skills keep their bare `/forge-*` names — no `contextforge:` prefix.
 
 ### Install one only
 
-Manual install only; the plugin ships all five. Supported — every shared block is duplicated inside
+Manual install only; the plugin ships all six. Supported — every shared block is duplicated inside
 each skill dir precisely so one skill works standalone (see [For Maintainers](#for-maintainers)):
 
 ```bash
@@ -190,7 +195,7 @@ The in-session equivalents are `/plugin marketplace update contextforge` and `/p
 
 ### Switching from a manual install to the plugin
 
-Delete the copied skills after installing the plugin, or the same five show up twice — once bare,
+Delete the copied skills after installing the plugin, or the same six show up twice — once bare,
 once as `contextforge:*`:
 
 ```bash
@@ -262,7 +267,7 @@ rm -f ~/.claude/commands/forge-*.md   # only if you ever used a pre-skill instal
 
 ## The Loop
 
-The five skills share one graph and run in a loop:
+The six skills share one graph and run in a loop:
 
 ```
 Setup (once)          /forge-contextmap                   → scaffold docs + build graph + post-commit hook
@@ -285,6 +290,10 @@ When something breaks /forge-diagnose <issue>             → root cause (no cod
                       /forge-orchestrate doc/diagnosis-*  → execute that handoff, ambiguity scan skipped
 
 Periodic / on-demand  /forge-audit                        → whole-repo bloat sweep (read-only)
+
+Any time                /forge-summary                    → plain-English recap of this session
+                        /forge-summary project            → plain-English answer to "what is this
+                                                            codebase" (never reads the session)
 ```
 
 | Command | Use it when | Writes | Git |
@@ -294,6 +303,7 @@ Periodic / on-demand  /forge-audit                        → whole-repo bloat s
 | `/forge-merge [branch]` | You've reviewed an orchestrate branch and want it landed | nothing | one merge commit on `main`/`master`, then deletes the branch — never pushes |
 | `/forge-audit [path]` | Cleaning up accumulated bloat, before a refactor or release | nothing (report-only) | never commits |
 | `/forge-diagnose <issue>` | Something is broken and the fix will run in another session | `doc/diagnosis-<slug>.md` only | never commits |
+| `/forge-summary [session \| project]` | You've lost the thread of a long session, or you're new to the repo | nothing (report-only) | never commits |
 
 **Bare `/forge-orchestrate` is the normal way to run it.** With no arguments it reads
 `doc/task-list.md`, picks the first unchecked `### Task N.M` whose `Depends on` are all done, and
@@ -321,14 +331,17 @@ Reach for `/forge-audit` on-demand when cruft has piled up.
 
 ---
 
-## The Five Skills
+## The Six Skills
 
-**All five run under Claude Code's plan mode**, and all five write the same shaped plan: Context ·
-What changes · Decisions I made for you · How it runs · Verify · Not doing. The governing rule is
-that the plan describes *the work and the decisions*, never the pipeline that will execute it — no
-phase numbers, gate names or worktrees outside a single line. Each skill runs only its read-only
-phases, says what it could not compute, and names where it resumes once you approve. ExitPlanMode is
-the approval; no skill asks a second time.
+**Five of the six run under Claude Code's plan mode**, and those five write the same shaped plan:
+Context · What changes · Decisions I made for you · How it runs · Verify · Not doing. The governing
+rule is that the plan describes *the work and the decisions*, never the pipeline that will execute
+it — no phase numbers, gate names or worktrees outside a single line. Each skill runs only its
+read-only phases, says what it could not compute, and names where it resumes once you approve.
+ExitPlanMode is the approval; no skill asks a second time.
+
+`/forge-summary` is the exception, and it is the honest one: it never writes, so plan mode restricts
+nothing. It runs in full, prints its summary, and writes no plan file — there is no work to approve.
 
 
 ### /forge-contextmap — Scaffold the Docs, Build the Map
@@ -641,6 +654,48 @@ the handoff has to be written, so `Write` is present — the guarantee that noth
 
 ---
 
+### /forge-summary — Catch Up in Plain English
+
+Every other command reports on its own run in its own vocabulary — decompositions, gate tables,
+ladder rungs, ancestry checks. `/forge-summary` answers the two questions those never answer, in
+words you can read at a glance. It writes nothing and judges nothing.
+
+```
+/forge-summary             # what have we done, and what's next?  (the default)
+/forge-summary project     # what IS this codebase?
+```
+
+**Session mode** — the default, and the reason the skill exists. A skill loads into the *live*
+session, so the conversation itself is the source: what you asked for, what was decided, what
+actually changed. That alone would be guesswork, so it checks the recall against the branch, the
+working tree, the last few commits, `progress.txt`, `changelog.txt`, the next unblocked task, and
+whatever you were working on — an active plan file, a diagnosis, a readiness report. **Where the
+recall and the repo disagree, the repo wins and it says so.** A result a subagent or a gate
+*reported* is attributed as a report, never restated as something observed.
+
+It prints five sections: **Now · Done · Next · Open · Grounded on**. Nothing else. That last one
+names what it actually read, so you can tell a grounded line from a remembered one.
+
+**Project mode** never touches the session. It reads `README.md`, `doc/prd.md`,
+`doc/architecture.md`, `doc/solution-structure.md`, `GRAPH_REPORT.md` and the last ten commits —
+falling back to whatever manifests exist when there is no `doc/` — and prints **What it is · How
+it's built · How it's laid out · Where it stands · Grounded on**. It never blind-reads source and
+never walks the whole tree.
+
+Neither mode needs the graph, and neither needs `doc/` — a missing source is named, not fatal, so
+this runs in a repo ContextForge has never touched.
+
+**It is the strictest read-only command here.** `/forge-diagnose` keeps `Write` because a handoff
+file has to exist; `/forge-audit` keeps it for a scratch script. `/forge-summary` has neither
+`Write` nor `Edit` in `allowed-tools` — there is no file it needs to produce. It also runs nothing
+slow: no build, no test suite, no graph rebuild.
+
+**Where it does not overlap:** `/forge-contextmap` *writes* the docs and *builds* the graph;
+`/forge-summary project` only reads and explains them. `/forge-audit` judges the code and hands back
+a delete-list; `/forge-summary` judges nothing.
+
+---
+
 ### Flags
 
 | Flag | Command | Effect |
@@ -649,8 +704,8 @@ the handoff has to be written, so `Write` is present — the guarantee that noth
 | `--new` | `/forge-contextmap` | Force the new-project interview even when source files exist |
 | `--graph-only` | `/forge-audit` | Skip source confirmation — faster, less precise, every finding tagged `[unconfirmed]` |
 
-`/forge-contextmap sync` and `/forge-orchestrate codex` are subcommands, not flags — they lead the
-argument list, and `codex` composes with `--no-commit`. `/forge-audit` also takes a bare path prefix
+`/forge-contextmap sync`, `/forge-orchestrate codex` and `/forge-summary session | project` are
+subcommands, not flags — they lead the argument list, and `codex` composes with `--no-commit`. `/forge-audit` also takes a bare path prefix
 (`/forge-audit src/checkout`) to scope the sweep. `/forge-merge` has no flags — it takes an optional
 bare branch name and defaults to the branch you're on.
 
@@ -865,7 +920,7 @@ string pins users until you bump it. `claude plugin validate .` warns about the 
 that warning is expected.
 
 Verify a change to either manifest with `claude plugin validate .` (schema) followed by
-`claude plugin details contextforge` (component inventory — must list all five skills; `validate`
+`claude plugin details contextforge` (component inventory — must list all six skills; `validate`
 alone passes even when the skills path resolves to nothing).
 
 ### Shared blocks
@@ -885,7 +940,7 @@ inside Python). Edit one copy, update the rest:
 | `bloat-buckets` | `skills/forge-audit/SKILL.md` Phase 1 · `skills/forge-contextmap/references/sync.md` S3.6 — bodies intentionally differ; the checker compares the orphan, duplicate-source, and god-node threshold expressions only |
 | `minimal-ladder` | `skills/forge-orchestrate/SKILL.md` 3c (`variant:payload` — single copy, never compared) · same file 5b (`variant:review`) · `skills/forge-audit/SKILL.md` Phase 2 (`variant:audit`) |
 | `source-doc-map` | `skills/forge-orchestrate/SKILL.md` 3b (`variant:dispatch`) · `skills/forge-contextmap/references/doc-templates.md` CLAUDE.md rule 1 (`variant:template`) |
-| `plan-mode` | `skills/forge-orchestrate/references/plan-mode.md` · `skills/forge-diagnose/references/plan-mode.md` · `skills/forge-contextmap/references/plan-mode.md` · `skills/forge-merge/SKILL.md` 0a.0 · `skills/forge-audit/SKILL.md` 0b.1 — no `variant:`, so all five bodies are compared against each other. Skill-specific rules live *outside* the markers on purpose; putting them inside would force a variant per copy and the checker skips singleton groups |
+| `plan-mode` | `skills/forge-orchestrate/references/plan-mode.md` · `skills/forge-diagnose/references/plan-mode.md` · `skills/forge-contextmap/references/plan-mode.md` · `skills/forge-merge/SKILL.md` 0a.0 · `skills/forge-audit/SKILL.md` 0b.1 — no `variant:`, so all five bodies are compared against each other. Skill-specific rules live *outside* the markers on purpose; putting them inside would force a variant per copy and the checker skips singleton groups. `/forge-summary` carries **no copy**: it never writes, so it has no blocked phases to declare, and a sixth verbatim body would describe restrictions that do not apply to it |
 
 Two constraints that are not negotiable:
 
